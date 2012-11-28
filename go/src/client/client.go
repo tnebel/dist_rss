@@ -1,7 +1,7 @@
 package main
 
 import (
-    "rnsproto"
+    "rssproto"
     "net/rpc"
     "fmt"
     "flag"
@@ -30,15 +30,15 @@ func main(){
         return
     }
     email := flag.Arg(0)
-    monitorURI := flag.Arg(1)
+    uri := flag.Arg(1)
 
     masterconn, err := makeConnection(mn)
     if err != nil {
         fmt.Println("Could not establish connection... aborting")
     }
 
-    args := &rnsproto.SubscribeArgs{email, monitorURI, sub}
-    reply := new(rnsproto.SubscribeReply)
+    args := &rssproto.SubscribeArgs{email, uri, sub}
+    reply := new(rssproto.SubscribeReply)
 
     //TODO: define service name and method name
     //TODO: Should this function call also retry? I think not
@@ -50,13 +50,13 @@ func main(){
     }
 
     switch reply.Status {
-    case rnsproto.SUBSUCCESS:
+    case rssproto.SUBSUCCESS:
         fmt.Printf("Subscription Successful\n")
-    case rnsproto.SUBFAIL:
+    case rssproto.SUBFAIL:
         fmt.Printf("Subscription already exists\n")
-    case rnsproto.UNSUBSUCCESS:
+    case rssproto.UNSUBSUCCESS:
         fmt.Printf("Unsubscribe successful\n")
-    case rnsproto.UNSUBFAIL:
+    case rssproto.UNSUBFAIL:
         fmt.Printf("Subscription does not exist\n")
     default:
         fmt.Printf("ERROR: Go debug your code!\n")
