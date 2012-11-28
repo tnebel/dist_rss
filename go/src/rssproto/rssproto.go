@@ -10,6 +10,7 @@ import (
 
 const (
     _ = iota
+    OK
     SUBSUCCESS
     UNSUBSUCCESS
     UNSUBFAIL
@@ -29,7 +30,15 @@ type JoinArgs struct {
     Callback string
 }
 
-Join Reply struct {
+type JoinReply struct {
+    Status int
+}
+
+type PingArgs struct {
+    CallderId uint32
+}
+
+type PingReply struct {
     Status int
 }
 

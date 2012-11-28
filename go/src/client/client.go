@@ -52,8 +52,6 @@ func main(){
     switch reply.Status {
     case rssproto.SUBSUCCESS:
         fmt.Printf("Subscription Successful\n")
-    case rssproto.SUBFAIL:
-        fmt.Printf("Subscription already exists\n")
     case rssproto.UNSUBSUCCESS:
         fmt.Printf("Unsubscribe successful\n")
     case rssproto.UNSUBFAIL:
