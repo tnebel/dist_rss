@@ -40,9 +40,7 @@ func main(){
     args := &rssproto.SubscribeArgs{email, uri, sub}
     reply := new(rssproto.SubscribeReply)
 
-    //TODO: define service name and method name
-    //TODO: Should this function call also retry? I think not
-    err = masterconn.Call("MasterServer.Subscribe",args,reply)
+    err = masterconn.Call("MasterServer.Subscribe", args, reply)
 
     if err != nil{
         fmt.Printf("ERROR: Remote Procedure Call Failed\n")
@@ -57,7 +55,7 @@ func main(){
     case rssproto.UNSUBFAIL:
         fmt.Printf("Subscription does not exist\n")
     default:
-        fmt.Printf("ERROR: Go debug your code!\n")
+        fmt.Printf("ERROR: this case should not occur\n")
     }
 }
 

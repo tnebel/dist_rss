@@ -63,7 +63,6 @@ func (rs *RssStore) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.Su
         reply.Status = rssproto.UNSUBFAIL
     }
     rs.lock.Unlock()
-    // TODO: set reply stuff
     return nil
 }
 
@@ -101,8 +100,20 @@ func CheckRSS(uri string, rssInfo *RSSInfo) bool {
     return false
 }
 
+func (rs *RssStore) Join() (int, error) {
+    args := new(rssproto.JoinArgs)
+    args.CallerId = rs.NodeId
+    args.Ballback = rs.Hostport
+    var reply rssproto.JoinReply
 
-
-
-
-
+    for i := 0; i < RETRIES; i++ {
+        if i != 0 {
+            time.Sleep(time.Second)
+        }
+        err := rs.MasterConn.Call("MasterNodeRPC.Join", args, &reply)
+        if err == nil {
+            return reply.Status, nil
+        }
+    }
+    return reply.Status, err
+}
