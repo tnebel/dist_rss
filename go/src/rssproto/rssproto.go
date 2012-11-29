@@ -2,10 +2,6 @@ package rssproto
 
 import (
     "hash/fnv"
-    "math"
-    "math/big"
-    "math/rand"
-    crand "crypto/rand"
 )
 
 const (

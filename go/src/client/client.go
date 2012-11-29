@@ -37,10 +37,11 @@ func main(){
         fmt.Println("Could not establish connection... aborting")
     }
 
-    args := &rssproto.SubscribeArgs{email, uri, sub}
+    args := &rssproto.SubscribeArgs{email, uri}
     reply := new(rssproto.SubscribeReply)
 
-    err = masterconn.Call("MasterServer.Subscribe", args, reply)
+    // TODO: logic if unsub
+    err = masterconn.Call("MasterNodeRPC.Subscribe", args, reply)
 
     if err != nil{
         fmt.Printf("ERROR: Remote Procedure Call Failed\n")
