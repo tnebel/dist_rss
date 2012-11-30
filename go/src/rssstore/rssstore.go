@@ -1,12 +1,12 @@
 package rssstore
 
 import (
-    "net/rpc"
-    "math"
     "time"
     "sync"
     "os/exec"
     "rssproto"
+    "fmt"
+    "net/rpc"
 )
 
 const (
@@ -16,8 +16,9 @@ const (
 type RssStore struct {
     hostport string
     uriToInfo map[string]*RSSInfo
-    lock *sinc.RWMutex
+    lock *sync.RWMutex
     NodeID uint32 
+    masterConn *rpc.Client
 }
 
 type RSSInfo struct {
@@ -26,14 +27,35 @@ type RSSInfo struct {
 }
 
 func NewRssStore(master string, portnum int, nodeId uint32) (*RssStore, error) {
+    conn, err := connectToMaster(master)
+    if err != nil {
+        return nil, err
+    }
     rs := new(RssStore)
     rs.uriToInfo = make(map[string]*RSSInfo)
     rs.lock = new(sync.RWMutex)
+    rs.masterConn = conn
+    return rs, nil
 }
 
-func (rs *RssStore) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) {
-    uri = args.URI
-    email = args.email
+func connectToMaster(master string) (*rpc.Client, error) {
+    var conn *rpc.Client
+    var err error
+    for i := 0; i < RETRIES; i++ {
+        if i != 0 {
+            time.Sleep(time.Second)
+        }
+        conn, err = rpc.DialHTTP("tcp", master)
+        if err == nil {
+            return conn, nil
+        }
+    }
+    return nil, err
+}
+
+func (rs *RssStore) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) (error) {
+    uri := args.URI
+    email := args.Email
     rs.lock.Lock()
     rssInfo, ok := rs.uriToInfo[uri]
     if !ok {
@@ -48,16 +70,16 @@ func (rs *RssStore) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.Subs
     return nil
 }
 
-func (rs *RssStore) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) {
-    uri = args.URI
-    email = args.email
+func (rs *RssStore) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) (error) {
+    uri := args.URI
+    email := args.Email
     rs.lock.Lock()
     rssInfo, ok := rs.uriToInfo[uri]
     if ok {
         delete(rssInfo.subscriptions, email)
         reply.Status = rssproto.UNSUBSUCCESS
         if len(rssInfo.subscriptions) == 0 {
-            delete(ss.uriToInfo, uri)
+            delete(rs.uriToInfo, uri)
         }
     } else {
         reply.Status = rssproto.UNSUBFAIL
@@ -70,7 +92,7 @@ func (rs *RssStore) CheckAll() {
     for {
         rs.lock.Lock() 
         for uri, rssInfo := range rs.uriToInfo {
-            if CheckRss(uri, rssInfo) {
+            if CheckRSS(uri, rssInfo) {
                 go rs.notify(uri, rssInfo.subscriptions)
             }
         }
@@ -102,15 +124,15 @@ func CheckRSS(uri string, rssInfo *RSSInfo) bool {
 
 func (rs *RssStore) Join() (int, error) {
     args := new(rssproto.JoinArgs)
-    args.CallerId = rs.NodeId
-    args.Ballback = rs.Hostport
+    args.CallerId = rs.NodeID
+    args.Callback = rs.hostport
     var reply rssproto.JoinReply
-
+    var err error
     for i := 0; i < RETRIES; i++ {
         if i != 0 {
             time.Sleep(time.Second)
         }
-        err := rs.MasterConn.Call("MasterNodeRPC.Join", args, &reply)
+        err = rs.masterConn.Call("MasterNodeRPC.Join", args, &reply)
         if err == nil {
             return reply.Status, nil
         }

@@ -10,19 +10,19 @@ type MasterNodeInterface interface {
 	Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error
 	Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error
     Join(args *rssproto.JoinArgs, reply *rssproto.JoinReply) error
-    FireEpoch(args *rssproto.JoinArgs, reply *rssproto.JoinReply) error
+    Ping(args *rssproto.PingArgs, reply *rssproto.PingReply) error
 }
 
 type MasterNodeRPC struct {
-	ms MasterNodeInterface
+	mn MasterNodeInterface
 }
 
 func NewMasterNodeRPC(mn MasterNodeInterface) *MasterNodeRPC {
 	return &MasterNodeRPC{mn}
 }
 
-func (msrpc *MasterNodeRPC) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error {
-	return msrpc.ms.Subscribe(args, reply)
+func (mnrpc *MasterNodeRPC) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error {
+	return mnrpc.mn.Subscribe(args, reply)
 }
 
 func (mnrpc *MasterNodeRPC) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error {

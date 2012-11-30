@@ -6,7 +6,6 @@ import (
     "fmt"
     "net"
     "net/rpc"
-    "rssproto"
     "rssstore"
     "rssstorerpc"
 )
@@ -19,9 +18,9 @@ func main() {
     flag.IntVar(&port, "p", 0, "Listening port of rssstore")
     flag.Parse()
 
-    p := uint32(port)
+    //p := uint32(port)
     
-    rs, err := rssstore.NewRssStore(mn, p)
+    rs, err := rssstore.NewRssStore(mn, port, 1)
 
     if err != nil {
         fmt.Printf("Error in creating rss store")
@@ -30,7 +29,7 @@ func main() {
 
     rpc.Register(rssstorerpc.NewRssStoreRPC(rs))
     rpc.HandleHTTP()
-    handle, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", p))
+    handle, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
     if err != nil {
         fmt.Println("Error listening for rssstore")
         return

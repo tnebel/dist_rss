@@ -18,7 +18,7 @@ func main(){
     flag.IntVar(&port,"p",5001,"Listening Port")
     flag.Parse()
 
-    mn := master.NewMaster(port)
+    mn := masternode.NewMaster(port)
 
     // Begin servicing RPC requests
     rpc.Register(masternoderpc.NewMasterNodeRPC(mn))

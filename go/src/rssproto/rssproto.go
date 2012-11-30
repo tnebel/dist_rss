@@ -10,6 +10,7 @@ const (
     SUBSUCCESS
     UNSUBSUCCESS
     UNSUBFAIL
+    NOCONNECTION
 )
 
 type SubscribeArgs struct {

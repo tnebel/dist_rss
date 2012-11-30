@@ -27,7 +27,7 @@ func NewMaster(port int) *MasterNode {
 
 func (mn *MasterNode) Join(args *rssproto.JoinArgs, reply *rssproto.JoinReply) error {
     mn.Addr = args.Callback
-    mn.CallderId = args.CallerId
+    mn.CallerId = args.CallerId
     mn.Connection = nil
 
     reply.Status = rssproto.OK
@@ -35,7 +35,7 @@ func (mn *MasterNode) Join(args *rssproto.JoinArgs, reply *rssproto.JoinReply) e
 }
 
 func (mn *MasterNode) Ping(args *rssproto.PingArgs, reply *rssproto.PingReply) error {
-    reply.Status = rnsproto.OK
+    reply.Status = rssproto.OK
     return nil
 }
 
@@ -53,18 +53,34 @@ func (mn *MasterNode) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.Su
     return nil
 }
 
+func (mn *MasterNode) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error {
+    conn, err := RssStoreConnect(mn)
+    if err != nil {
+        reply.Status = rssproto.NOCONNECTION
+        return err
+    }
+    err = conn.Call("RssStoreRPC.Unsubscribe", args, reply)
+    if err != nil {
+        reply.Status = rssproto.NOCONNECTION
+        return err
+    }
+    return nil
+}
+
 func RssStoreConnect(mn *MasterNode) (*rpc.Client, error) {
     if mn.Connection != nil {
-        return mn.Connection
+        return mn.Connection, nil
     }
+    var err error
     for i := 0; i < RETRIES; i++ {
         if i != 0 {
             time.Sleep(time.Second)
         }
-        srvconn, err := rpc.DialHTTP("tcp", mn.Addr)
+        var srvconn *rpc.Client
+        srvconn, err = rpc.DialHTTP("tcp", mn.Addr)
         if err == nil {
             mn.Connection = srvconn
-            return srvconn
+            return srvconn, nil
         }
     }
     fmt.Printf("Could not connect after %d attempts", RETRIES)

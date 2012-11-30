@@ -1,3 +1,5 @@
+package rssstorerpc
+
 import (
     "rssproto"
 )
@@ -19,6 +21,6 @@ func (rsrpc *RssStoreRPC) Subscribe(args *rssproto.SubscribeArgs, reply *rssprot
     return rsrpc.rs.Subscribe(args, reply)
 }
 
-func (rsrpc *AppStoreRPC) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error {
+func (rsrpc *RssStoreRPC) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error {
     return rsrpc.rs.Unsubscribe(args, reply)
 }
