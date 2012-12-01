@@ -26,6 +26,7 @@ func NewMaster(port int) *MasterNode {
 }
 
 func (mn *MasterNode) Join(args *rssproto.JoinArgs, reply *rssproto.JoinReply) error {
+    defer fmt.Println("Rss Store joined Master")
     mn.Addr = args.Callback
     mn.CallerId = args.CallerId
     mn.Connection = nil

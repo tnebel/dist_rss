@@ -27,6 +27,7 @@ type RSSInfo struct {
 }
 
 func NewRssStore(master string, portnum int, nodeId uint32) (*RssStore, error) {
+    defer fmt.Println("New RssStore going")
     conn, err := connectToMaster(master)
     if err != nil {
         return nil, err
@@ -35,6 +36,12 @@ func NewRssStore(master string, portnum int, nodeId uint32) (*RssStore, error) {
     rs.uriToInfo = make(map[string]*RSSInfo)
     rs.lock = new(sync.RWMutex)
     rs.masterConn = conn
+    _, err = rs.Join()
+    if err != nil {
+        fmt.Println("Error in trying to join to master")
+        return nil, err
+    }
+    go rs.CheckAll()
     return rs, nil
 }
 
@@ -137,5 +144,6 @@ func (rs *RssStore) Join() (int, error) {
             return reply.Status, nil
         }
     }
+    fmt.Prinln("Rss stored joined master")
     return reply.Status, err
 }
