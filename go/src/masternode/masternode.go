@@ -30,6 +30,7 @@ func (mn *MasterNode) Join(args *rssproto.JoinArgs, reply *rssproto.JoinReply) e
     mn.Addr = args.Callback
     mn.CallerId = args.CallerId
     mn.Connection = nil
+    fmt.Println(fmt.Sprintf("Joined using addr %s.", mn.Addr))
 
     reply.Status = rssproto.OK
     return nil

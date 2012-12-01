@@ -36,6 +36,7 @@ func NewRssStore(master string, portnum int, nodeId uint32) (*RssStore, error) {
     rs.uriToInfo = make(map[string]*RSSInfo)
     rs.lock = new(sync.RWMutex)
     rs.masterConn = conn
+    rs.hostport = fmt.Sprintf("localhost:%d", portnum)
     _, err = rs.Join()
     if err != nil {
         fmt.Println("Error in trying to join to master")
@@ -144,6 +145,6 @@ func (rs *RssStore) Join() (int, error) {
             return reply.Status, nil
         }
     }
-    fmt.Prinln("Rss stored joined master")
+    fmt.Println("Rss stored joined master")
     return reply.Status, err
 }

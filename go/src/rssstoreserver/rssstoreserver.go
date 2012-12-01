@@ -15,7 +15,7 @@ func main() {
     var port int
 
     flag.StringVar(&mn, "m", "localhost:5001", "hostport of master node")
-    flag.IntVar(&port, "p", 0, "Listening port of rssstore")
+    flag.IntVar(&port, "p", 5002, "Listening port of rssstore")
     flag.Parse()
 
     //p := uint32(port)
