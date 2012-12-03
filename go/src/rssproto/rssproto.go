@@ -44,3 +44,21 @@ func Hash(key []byte) uint32 {
     h.Write(key)
     return h.Sum32()
 }
+
+// RegisterReply is sent in response to both Register and GetServers
+type RegisterArgs struct {
+    ServerInfo Node
+}
+
+type RegisterReply struct {
+    Ready bool
+    Servers []Node 
+}
+
+type Node struct {
+     HostPort string
+     NodeID uint32
+}
+
+type GetServersArgs struct {
+}
