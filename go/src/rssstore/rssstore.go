@@ -6,6 +6,7 @@ import (
     "sync"
     "os/exec"
     "rssproto"
+    "masternode"
     "fmt"
     "net/rpc"
     crand "crypto/rand"
@@ -22,7 +23,7 @@ type RssStore struct {
     hostport string
     uriToInfo map[string]*RSSInfo
     lock *sync.RWMutex
-    NodeID uint32
+    nodeId uint32
     //backupConn *rpc.Client
     portnum int
     nodelist []rssproto.Node
@@ -44,7 +45,6 @@ func seedRNG() {
     rand.Seed( randint.Int64())
 }
 
-
 func NewRssStore(master string, portnum int, nodeId uint32, numNodes int) (*RssStore, error) {
     defer fmt.Println("New RssStore going")
 
@@ -58,10 +58,12 @@ func NewRssStore(master string, portnum int, nodeId uint32, numNodes int) (*RssS
 
     //TODO when we add in backups and spares, this will be determined by the master node initially.
     seedRNG()
-    rs.NodeID = rand.Uint32()
+    rs.nodeId = rand.Uint32()
 
     rs.uriToInfo = make(map[string]*RSSInfo)
     rs.lock = new(sync.RWMutex)
+    rs.registrationSignalCh = make(chan bool, 1)
+    rs.registrationMutex = sync.Mutex{}
 
     go  rs.RegisterWithMaster(master)
     return rs, nil
@@ -70,7 +72,8 @@ func NewRssStore(master string, portnum int, nodeId uint32, numNodes int) (*RssS
 
 func (rs *RssStore) RegisterServer(args *rssproto.RegisterArgs, reply *rssproto.RegisterReply) error {
     rs.registrationMutex.Lock()
-    //TODO we'll decide right here whether this node is a primary, backup, or spare node
+    //TODO we'll decide right here whether this node is a primary, backup, or spare node.
+    //     for now, all nodes are primary nodes
     //TODO this means we'll have to designate the id of the registering node, instead of letting it self-assign
     rs.nodelist = append(rs.nodelist, args.ServerInfo)
     rs.numregistered += 1
@@ -102,7 +105,7 @@ func (rs *RssStore) RegisterWithMaster(master string) error {
     }
 
     numTries = 0
-    args := rssproto.RegisterArgs{rssproto.Node{fmt.Sprintf("localhost:%d", rs.portnum), rs.NodeID}}
+    args := rssproto.RegisterArgs{rssproto.Node{fmt.Sprintf("localhost:%d", rs.portnum), rs.nodeId}}
     var reply rssproto.RegisterReply
     for !rs.registered {
         if numTries == RETRIES {
@@ -169,6 +172,37 @@ func connectToServer(serverAddr string) (*rpc.Client, error) {
     return nil, err
 }
 
+/* verify that the key passed really should go to this partition */
+func (rs *RssStore) verifyKey(key string) bool {
+    //TODO where is Storehash really going to be?
+    keyId := masternode.Storehash(key)
+    calculatedId := determinePartitionID(keyId, rs.nodelist)
+    return calculatedId == rs.nodeId
+}
+
+func determinePartitionID (keyid uint32, nodeIdList []rssproto.Node) uint32 {
+    // we'll keep track of the smallest partition greater than our id, and also the min id.
+    // We return the min id only if there does not exist a partition with id greater than keyid
+    minId := uint32(math.MaxUint32)
+    partitionId := keyid - 1
+    for i:=0; i<len(nodeIdList); i++{
+        nextId := nodeIdList[i].NodeID
+        if nextId >= keyid && nextId - keyid < partitionId - keyid {
+            partitionId = nextId
+        }
+        if nextId < minId {
+            minId = nextId
+        }
+    }
+    if partitionId >= keyid {
+        // then there is a partition id greater than this key id
+        return partitionId
+    }
+    // then there is no partition id greater than this key id, so we 
+    // wrap around and return the smallest partition id.
+    return minId
+}
+
 func (rs *RssStore) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) (error) {
     if !rs.isRegistered() {
         fmt.Println("Could not register with master server")
@@ -177,8 +211,16 @@ func (rs *RssStore) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.Subs
 
     uri := args.URI
     email := args.Email
+
+    if !rs.verifyKey(uri) {
+        // wrong parition
+        reply.Status = rssproto.EWRONGSERVER
+        return nil
+    }
+
     rs.lock.Lock()
     rssInfo, ok := rs.uriToInfo[uri]
+
     if !ok {
         rssInfo = new(RSSInfo)
         rssInfo.hash = 0
@@ -199,6 +241,13 @@ func (rs *RssStore) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.Su
 
     uri := args.URI
     email := args.Email
+
+    if !rs.verifyKey(uri) {
+        // wrong parition
+        reply.Status = rssproto.EWRONGSERVER
+        return nil
+    }
+
     rs.lock.Lock()
     rssInfo, ok := rs.uriToInfo[uri]
     if ok {
@@ -230,7 +279,7 @@ func (rs *RssStore) CheckAll() {
 func (rs *RssStore) notify(uri string, subscriptions map[string]bool) {
     for email, _ := range subscriptions {
         // TODO: send email
-        fmt.Printf("RssStore[%d] emailing %s since %s updated detected", rs.NodeID, email, uri)
+        fmt.Printf("RssStore[%d] emailing %s since %s updated detected", rs.nodeId, email, uri)
     }
 }
 
@@ -249,10 +298,10 @@ func CheckRSS(uri string, rssInfo *RSSInfo) bool {
 }
 
 /*
-We shouldn't need this function anymore
+TODO We shouldn't need this function anymore, right?
 func (rs *RssStore) Join() (int, error) {
     args := new(rssproto.JoinArgs)
-    args.CallerId = rs.NodeID
+    args.CallerId = rs.nodeId
     args.Callback = rs.hostport
     var reply rssproto.JoinReply
     var err error

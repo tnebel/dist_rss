@@ -11,6 +11,7 @@ const (
     UNSUBSUCCESS
     UNSUBFAIL
     NOCONNECTION
+    EWRONGSERVER
 )
 
 type SubscribeArgs struct {
