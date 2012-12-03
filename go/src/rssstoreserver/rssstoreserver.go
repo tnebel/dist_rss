@@ -21,9 +21,7 @@ func main() {
 
     flag.Parse()
 
-    //p := uint32(port)
-
-    rs, err := rssstore.NewRssStore(mn, port, 1, numNodes)
+    rs, err := rssstore.NewRssStore(mn, port, numNodes)
 
     if err != nil {
         fmt.Printf("Error in creating rss store")

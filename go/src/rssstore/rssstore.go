@@ -45,7 +45,7 @@ func seedRNG() {
     rand.Seed( randint.Int64())
 }
 
-func NewRssStore(master string, portnum int, nodeId uint32, numNodes int) (*RssStore, error) {
+func NewRssStore(master string, portnum int, numNodes int) (*RssStore, error) {
     defer fmt.Println("New RssStore going")
 
     rs := new(RssStore)
@@ -174,7 +174,6 @@ func connectToServer(serverAddr string) (*rpc.Client, error) {
 
 /* verify that the key passed really should go to this partition */
 func (rs *RssStore) verifyKey(key string) bool {
-    //TODO where is Storehash really going to be?
     keyId := masternode.Storehash(key)
     calculatedId := determinePartitionID(keyId, rs.nodelist)
     return calculatedId == rs.nodeId
