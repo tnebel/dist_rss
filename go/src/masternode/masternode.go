@@ -26,6 +26,7 @@ type MasterNode struct {
 // server: address of storage server to make initial connection to
 func NewMaster(port int, server string) *MasterNode {
     mn := new(MasterNode)
+    mn.rpcClientMap = make(map[uint32]*rpc.Client)
     mn.rpcClientMapLock = new(sync.RWMutex)
     mn.initialServer = server
     var err error

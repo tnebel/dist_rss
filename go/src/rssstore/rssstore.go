@@ -66,6 +66,7 @@ func NewRssStore(master string, portnum int, numNodes int) (*RssStore, error) {
     rs.registrationMutex = sync.Mutex{}
 
     go  rs.RegisterWithMaster(master)
+    go rs.CheckAll()
     return rs, nil
 }
 
@@ -112,7 +113,7 @@ func (rs *RssStore) RegisterWithMaster(master string) error {
             fmt.Println("Could not register with server")
             return errors.New("Could not register with server.")
         }
-        err := client.Call("StorageRPC.Register", &args, &reply)
+        err := client.Call("RssStoreRPC.RegisterServer", &args, &reply)
         if err != nil {
             numTries += 1
             time.Sleep(time.Second)
@@ -130,7 +131,7 @@ func (rs *RssStore) RegisterWithMaster(master string) error {
             fmt.Println("Server refused multiple RPCs.")
             return errors.New("Server refused multiple RPCs.")
         }
-        err := client.Call("StorageRPC.GetServers", &getserversArgs, &getserversReply)
+        err := client.Call("RssStoreRPC.GetServers", &getserversArgs, &getserversReply)
         if err != nil || !getserversReply.Ready {
             numTries += 1
             time.Sleep(time.Second)
