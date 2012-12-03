@@ -9,7 +9,6 @@ import (
 type MasterNodeInterface interface {
 	Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error
 	Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error
-    Join(args *rssproto.JoinArgs, reply *rssproto.JoinReply) error
     Ping(args *rssproto.PingArgs, reply *rssproto.PingReply) error
 }
 
@@ -27,10 +26,6 @@ func (mnrpc *MasterNodeRPC) Subscribe(args *rssproto.SubscribeArgs, reply *rsspr
 
 func (mnrpc *MasterNodeRPC) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error {
 	return mnrpc.mn.Unsubscribe(args, reply)
-}
-
-func (mnrpc *MasterNodeRPC) Join(args *rssproto.JoinArgs, reply *rssproto.JoinReply) error {
-	return mnrpc.mn.Join(args, reply)
 }
 
 func (mnrpc *MasterNodeRPC) Ping(args *rssproto.PingArgs, reply *rssproto.PingReply) error {
