@@ -63,9 +63,6 @@ func NewRssStore(master string, portnum int, numNodes int, numSpareNodes int) (*
     rs.hostport = fmt.Sprintf("localhost:%d", portnum)
     rs.numPrimaryNodes = numNodes
     rs.numSpareNodes = numSpareNodes
-    if rs.numnodes == 0 {
-        rs.numnodes = 1
-    }
 
     rs.uriToInfo = make(map[string]*RSSInfo)
     rs.lock = new(sync.RWMutex)
@@ -188,9 +185,17 @@ func (rs *RssStore) RegisterWithMaster(master string) error {
 
 func (rs *RssStore) GetServers(args *rssproto.GetServersArgs, reply *rssproto.RegisterReply) error {
     rs.nodelistMutex.Lock()
+    if len(reply.PrimaryServers == 0) {
+        // then we are obviously not ready. If this condition is true for non-master nodes,
+        // then they have not managed to get servers yet. Otherwise, they are certainly ready.
+        reply.Ready = false;
+        return nil
+    }
     bool allPrimariesRegistered = rs.numPrimaryRegistered == rs.numPrimaryNodes
     bool allBackupsRegistered = rs.numBackupsRegistered == rs.numPrimaryNodes
     bool allSparesRegistered = rs.numSparesRegistered == rs.numSpareNodes
+    //note: if this node was not the master node, then these three are true
+    //      by default, 
     reply.Ready = allPrimariesRegistered && allBackupsRegistered && allSparesRegistered
     reply.PrimaryServers = rs.primaryNodeList
     reply.BackupServers = rs.backupNodeList
@@ -241,9 +246,6 @@ func (rs *RssStore) UpdateNodeType (args *rssproto.UpdateNodeTypeArgs, reply *rs
 }
 
 func (rs *RssStore) BeginRepair () error {
-    //TODO Check to make sure we have not already repaired! (backupConn == nil)
-    //TODO make requests to get a spare to agree to be our backup
-    //TODO BE CAREFUL W/ SYSTEM DEADLOCK!
     rs.lock.Lock()
     rs.nodelistMutex.Lock()
     if rs.backupConn !=nil {
