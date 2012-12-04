@@ -14,6 +14,7 @@ func main() {
     var mn string
     var port int
     var numNodes int
+    var numSpareNodes int
 
     flag.StringVar(&mn, "m", "localhost:5002", "hostport of master storage node")
     flag.IntVar(&port, "p", 5002, "Listening port of rssstore")

@@ -59,7 +59,7 @@ type RegisterArgs struct {
 }
 
 type RegisterReply struct {
-    NodeType uint
+    NodeType int
     NodeID uint32
     Ready bool
     PrimaryServers []Node

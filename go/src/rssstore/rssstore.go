@@ -34,9 +34,9 @@ type RssStore struct {
     nodelistMutex sync.Mutex
     numPrimaryNodes int
     numSpareNodes int
-    numPrimaryRegistered int
-    numBackupRegistered int
-    numSpareRegistered int
+    numPrimariesRegistered int
+    numBackupsRegistered int
+    numSparesRegistered int
     backupConn *rpc.Client
 
     rpcClientMap map[string]*rpc.Client
@@ -79,26 +79,26 @@ func NewRssStore(master string, portnum int, numNodes int, numSpareNodes int) (*
 
 func (rs *RssStore) RegisterServer(args *rssproto.RegisterArgs, reply *rssproto.RegisterReply) error {
     rs.nodelistMutex.Lock()
-    if (rs.numPrimaryRegistered < rs.numPrimaryNodes){
+    if (rs.numPrimariesRegistered < rs.numPrimaryNodes){
         // Then we will register this node as a primary node
         seedRNG()
         reply.NodeID = rand.Uint32()
         rs.primaryNodeList = append(rs.primaryNodeList, rssproto.Node{args.ServerInfo.HostPort, reply.NodeID})
-        rs.numPrimaryRegistered += 1
+        rs.numPrimariesRegistered += 1
     } else if (rs.numBackupsRegistered < rs.numPrimaryNodes){
         // Then we will register this node as a backup node
         reply.NodeID = rs.primaryNodeList[rs.numBackupsRegistered].NodeID
         rs.backupNodeList = append(rs.backupNodeList, rssproto.Node{args.ServerInfo.HostPort, reply.NodeID})
-        rs.numBackupRegistered += 1
+        rs.numBackupsRegistered += 1
     } else {
         reply.NodeID = 0
         rs.spareNodeList = append(rs.spareNodeList, rssproto.Node{args.ServerInfo.HostPort, reply.NodeID})
-        rs.numSpareRegistered += 1
+        rs.numSparesRegistered += 1
     }
 
-    bool allPrimariesRegistered = rs.numPrimaryRegistered == rs.numPrimaryNodes
-    bool allBackupsRegistered = rs.numBackupsRegistered == rs.numPrimaryNodes
-    bool allSparesRegistered = rs.numSparesRegistered == rs.numSpareNodes
+    allPrimariesRegistered := rs.numPrimariesRegistered == rs.numPrimaryNodes
+    allBackupsRegistered := rs.numBackupsRegistered == rs.numPrimaryNodes
+    allSparesRegistered := rs.numSparesRegistered == rs.numSpareNodes
     reply.Ready = allPrimariesRegistered && allBackupsRegistered && allSparesRegistered
     reply.PrimaryServers = rs.primaryNodeList
     reply.BackupServers = rs.backupNodeList
@@ -134,7 +134,7 @@ func (rs *RssStore) RegisterWithMaster(master string) error {
             fmt.Println("Could not register with server")
             return errors.New("Could not register with server.")
         }
-        err := client.Call("StorageRPC.Register", &args, &reply)
+        err := client.Call("RssStoreRPC.RegisterServer", &args, &reply)
         if err != nil {
             numTries += 1
             time.Sleep(time.Second)
@@ -149,7 +149,7 @@ func (rs *RssStore) RegisterWithMaster(master string) error {
             fmt.Println("Server refused multiple RPCs.")
             return errors.New("Server refused multiple RPCs.")
         }
-        err := client.Call("StorageRPC.GetServers", &getserversArgs, &getserversReply)
+        err := client.Call("RssStoreRPC.GetServers", &getserversArgs, &getserversReply)
         if err != nil || !getserversReply.Ready {
             numTries += 1
             time.Sleep(time.Second)
@@ -164,13 +164,13 @@ func (rs *RssStore) RegisterWithMaster(master string) error {
                 // a connection to our secondary node.
                 // determine the address of our backup
                 backupAddr := ""
-                for i:=0; i<len(rs.backupNodeList); ++i {
+                for i:=0; i<len(rs.backupNodeList); i++ {
                     if rs.backupNodeList[i].NodeID == rs.nodeId {
                         backupAddr = rs.backupNodeList[i].HostPort
                     }
                 }
                 // set up an RPC connection to that backup
-                rs.backupConn, err := rs.getConnection(backupAddr)
+                rs.backupConn, err = rs.getConnection(backupAddr)
                 if err != nil {
                     fmt.Println("Could not connect to backup node on startup")
                     return err
@@ -185,15 +185,15 @@ func (rs *RssStore) RegisterWithMaster(master string) error {
 
 func (rs *RssStore) GetServers(args *rssproto.GetServersArgs, reply *rssproto.RegisterReply) error {
     rs.nodelistMutex.Lock()
-    if len(reply.PrimaryServers == 0) {
+    if len(reply.PrimaryServers) == 0 {
         // then we are obviously not ready. If this condition is true for non-master nodes,
         // then they have not managed to get servers yet. Otherwise, they are certainly ready.
         reply.Ready = false;
         return nil
     }
-    bool allPrimariesRegistered = rs.numPrimaryRegistered == rs.numPrimaryNodes
-    bool allBackupsRegistered = rs.numBackupsRegistered == rs.numPrimaryNodes
-    bool allSparesRegistered = rs.numSparesRegistered == rs.numSpareNodes
+    allPrimariesRegistered := rs.numPrimariesRegistered == rs.numPrimaryNodes
+    allBackupsRegistered := rs.numBackupsRegistered == rs.numPrimaryNodes
+    allSparesRegistered := rs.numSparesRegistered == rs.numSpareNodes
     //note: if this node was not the master node, then these three are true
     //      by default, 
     reply.Ready = allPrimariesRegistered && allBackupsRegistered && allSparesRegistered
@@ -209,40 +209,41 @@ func (rs *RssStore) UpdateNodeType (args *rssproto.UpdateNodeTypeArgs, reply *rs
     // if this node is a spare node, then it should accept requests to become a backup node.
     // if this node is a primary node, then it should not accept node change requests.
     requestedType := args.NewNodeType
-    newNodeID := args.NodeID
+    newNodeID := args.NewNodeID
 
     rs.lock.Lock()
     rs.nodelistMutex.Lock()
-    if (rs.nodeType == rssproto.BACKUP
-        && requestedType == rssproto.PRIMARY
-        && newNodeID == rs.nodeId){
+    if (rs.nodeType == rssproto.BACKUP && requestedType == rssproto.PRIMARY && newNodeID == rs.nodeId){
         // Then a node is notifying us that our primary node is dead.
         // Step up and become the new primary, notify other nodes, and initiate 'repair' process
         rs.nodeType = rssproto.PRIMARY
         rs.backupConn = nil
+        reply.Status = rssproto.TYPECHANGESUCCESS
         rs.lock.Unlock()
         rs.nodelistMutex.Unlock()
-        var args UpdateNodeListArgs
-        args.NewPrimary = rssproto.Node{rs.HostPort, rs.nodeId}
-        go BroadcastUpdate(args)
-        BeginRepair()
+        var args rssproto.UpdateNodeListArgs
+        args.NewPrimary = rssproto.Node{rs.hostport, rs.nodeId}
+        go rs.BroadcastUpdate(&args)
+        rs.BeginRepair()
     } else if ( rs.nodeType == rssproto.SPARE && requestedType == rssproto.BACKUP ) {
         // Then a node is requesting that we become a backup node.
         // Notify the node that we are committing to being its backup.
         // Upon changing type, notify other nodes.
         rs.nodeType = rssproto.BACKUP
+        reply.Status = rssproto.TYPECHANGESUCCESS
         rs.nodeId = newNodeID
         rs.lock.Unlock()
         rs.nodelistMutex.Unlock()
-        var args UpdateNodeListArgs
-        args.NewBackup = rssproto.Node{rs.HostPort, newNodeID}
-        go BroadcastUpdate(args)
+        var args rssproto.UpdateNodeListArgs
+        args.NewBackup = rssproto.Node{rs.hostport, newNodeID}
+        go rs.BroadcastUpdate(&args)
     } else {
         // then the request is outdated--the other node has made a request and is not updated
         rs.lock.Unlock()
         rs.nodelistMutex.Unlock()
-        reply.status = rssproto.TYPECHANGEFAILURE
+        reply.Status = rssproto.TYPECHANGEFAILURE
     }
+    return nil
 }
 
 func (rs *RssStore) BeginRepair () error {
@@ -254,19 +255,23 @@ func (rs *RssStore) BeginRepair () error {
         rs.nodelistMutex.Unlock()
         return nil
     }
-    for i:=0; i<len(rs.spareNodeList); ++i {
+    for i:=0; i<len(rs.spareNodeList); i++ {
         // request node change from spares (release nodelist lock before this call)
         nextSpare := rs.spareNodeList[i]
-        var args UpdateNodeTypeArgs
-        var reply UpdateNodeTypeReply
+        var args rssproto.UpdateNodeTypeArgs
+        var reply rssproto.UpdateNodeTypeReply
         args.NewNodeType = rssproto.BACKUP
         args.NewNodeID = rs.nodeId
+        cli, err := rs.getConnection(nextSpare.HostPort)
+        if err != nil {
+            continue
+        }
         //TODO do we want to unlock stuff before our rpc call? if we do, we'll have to do some stuff to ensure no other repair calls go through
         err = cli.Call("RssStoreRPC.UpdateNodeType", args, reply)
-        if err != nil || reply.Status != TYPECHANGESUCCESS {
+        if err != nil || reply.Status != rssproto.TYPECHANGESUCCESS {
             continue
         } else {
-            rs.backupConn = getConnection(nextSpare.HostPort)
+            rs.backupConn = cli
             break
         }
     }
@@ -279,12 +284,12 @@ func (rs *RssStore) BeginRepair () error {
     // if we've made it to this point, we have a connection to a new backup server.
     // We have to transfer all our data to this new backup server.
     for uri, rssInfo := range rs.uriToInfo {
-        for email, sub := range rssInfo.subscriptions {
+        for email, _ := range rssInfo.subscriptions {
             var args *rssproto.SubscribeArgs
             var reply *rssproto.SubscribeReply
             args.Email = email
             args.URI = uri
-            err = rs.backupConn.Call("RssStoreRPC.Subscribe", args, reply)
+            err := rs.backupConn.Call("RssStoreRPC.Subscribe", args, reply)
             if err != nil {
                 //then we already lost our backup connection. move on without a backup
                 rs.backupConn = nil
@@ -296,6 +301,7 @@ func (rs *RssStore) BeginRepair () error {
     }
     rs.lock.Unlock()
     rs.nodelistMutex.Unlock()
+    return nil
 }
 
 func (rs *RssStore) UpdateNodeLists (args *rssproto.UpdateNodeListArgs, reply *rssproto.UpdateNodeListReply) error {
@@ -303,23 +309,23 @@ func (rs *RssStore) UpdateNodeLists (args *rssproto.UpdateNodeListArgs, reply *r
     newPrimary := args.NewPrimary
     newBackup := args.NewPrimary
     newSpare := args.NewPrimary
-    if newPrimary != nil {
-        for i:=0; i<len(rs.primaryNodeList); ++i{
+    if newPrimary.HostPort != "" {
+        for i:=0; i<len(rs.primaryNodeList); i++ {
             if rs.primaryNodeList[i].NodeID == newPrimary.NodeID{
                 rs.primaryNodeList[i] = newPrimary
                 continue
             }
         }
     }
-    if newBackup != nil {
+    if newBackup.HostPort != ""{
         // if there is a new backup, then a spare node is replacing a backup node
-        for i:=0; i<len(rs.backupNodeList); ++i {
+        for i:=0; i<len(rs.backupNodeList); i++ {
             if rs.backupNodeList[i].NodeID == newBackup.NodeID{
                 rs.backupNodeList[i] = newBackup
                 continue
             }
         }
-        for i:=0; i<len(rs.spareNodeList); ++i {
+        for i:=0; i<len(rs.spareNodeList); i++ {
             if rs.spareNodeList[i].HostPort == newBackup.HostPort {
                 // remove this node from the spare list
                 rs.spareNodeList[i] = rs.spareNodeList[len(rs.spareNodeList)-1]
@@ -328,10 +334,11 @@ func (rs *RssStore) UpdateNodeLists (args *rssproto.UpdateNodeListArgs, reply *r
             }
         }
     }
-    if newSpare != nil {
+    if newSpare.HostPort != "" {
         rs.spareNodeList = append(rs.spareNodeList, newSpare)
     }
     rs.nodelistMutex.Unlock()
+    return nil
 }
 
 func (rs *RssStore) BroadcastUpdate (args *rssproto.UpdateNodeListArgs) error {
@@ -339,9 +346,9 @@ func (rs *RssStore) BroadcastUpdate (args *rssproto.UpdateNodeListArgs) error {
     nodeList := append(rs.primaryNodeList, rs.backupNodeList...)
     nodeList = append(nodeList, rs.spareNodeList...)
     rs.nodelistMutex.Unlock()
-    var reply UpdateNodeTypeReply
-    var nextNode Node
-    for i:=0; i< len(nodeList); ++i{
+    var reply rssproto.UpdateNodeTypeReply
+    var nextNode rssproto.Node
+    for i:=0; i< len(nodeList); i++ {
         nextNode = nodeList[i]
         cli, err := rs.getConnection(nextNode.HostPort)
         if err != nil {
@@ -349,6 +356,7 @@ func (rs *RssStore) BroadcastUpdate (args *rssproto.UpdateNodeListArgs) error {
         }
         _ = cli.Call("RssStoreRPC.UpdateNodeLists", args, reply)
     }
+    return nil
 }
 
 func (rs *RssStore) isRegistered() bool {
@@ -364,15 +372,15 @@ func (rs *RssStore) getConnection(serverAddr string) (*rpc.Client, error) {
     var conn *rpc.Client
     var err error
 
-    rs.rpcClientMapLock.RLock()
+    rs.clientMapLock.RLock()
     conn, ok := rs.rpcClientMap[serverAddr]
     if ok {
-        rs.rpcClientMapLock.RUnlock()
+        rs.clientMapLock.RUnlock()
         return conn, nil
     }
-    rs.rpcClientMapLock.RUnlock()
+    rs.clientMapLock.RUnlock()
 
-    rs.rpcClientMapLock.Lock()
+    rs.clientMapLock.Lock()
     for i := 0; i < RETRIES; i++ {
         if i != 0 {
             time.Sleep(time.Second)
@@ -380,24 +388,24 @@ func (rs *RssStore) getConnection(serverAddr string) (*rpc.Client, error) {
         //Check the cache again to make sure it hasn't been recently updated
         conn, ok = rs.rpcClientMap[serverAddr]
         if ok {
-            rs.rpcClientMapLock.Unlock()
+            rs.clientMapLock.Unlock()
             return conn, nil
         }
         conn, err = rpc.DialHTTP("tcp", serverAddr)
         if err == nil {
             rs.rpcClientMap[serverAddr] = conn
-            rs.rpcClientMapLock.Unlock()
+            rs.clientMapLock.Unlock()
             return conn, nil
         }
     }
-    rs.rpcClientMapLock.Unlock()
+    rs.clientMapLock.Unlock()
     return nil, err
 }
 
 /* verify that the key passed really should go to this partition */
 func (rs *RssStore) verifyKey(key string) bool {
     keyId := masternode.Storehash(key)
-    calculatedId := determinePartitionID(keyId, rs.nodelist)
+    calculatedId := determinePartitionID(keyId, rs.primaryNodeList)
     return calculatedId == rs.nodeId
 }
 
@@ -444,17 +452,17 @@ func (rs *RssStore) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.Subs
     // if the change is successful on the backup machine, we can assume 
     // that it will be successful on this node, also
     if rs.nodeType == rssproto.PRIMARY && rs.backupConn != nil{
-        err = backupConn.Call("RssStoreRPC.Subscribe", args, reply)
+        err := rs.backupConn.Call("RssStoreRPC.Subscribe", args, reply)
         if err != nil {
             // then we've lost our backup server. begin repair process.
             rs.nodelistMutex.Lock()
             rs.backupConn = nil
             rs.nodelistMutex.Unlock()
             rs.lock.Unlock()
-            BeginRepair()
+            rs.BeginRepair()
             rs.lock.Lock()
             if rs.backupConn != nil {
-                err = backupConn.Call("RssStoreRPC.Subscribe", args, reply)
+                err = rs.backupConn.Call("RssStoreRPC.Subscribe", args, reply)
                 if err != nil {
                     // Then our backup has already failed again. 
                     // We give up and move on without a backup.
@@ -503,17 +511,17 @@ func (rs *RssStore) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.Su
     // if the change is successful on the backup machine, we can assume 
     // that it will be successful on this node, also
     if rs.nodeType == rssproto.PRIMARY && rs.backupConn != nil{
-        err = cli.Call("RssStoreRPC.Unsubscribe", args, reply)
+        err := rs.backupConn.Call("RssStoreRPC.Unsubscribe", args, reply)
         if err != nil {
             // then we've lost our backup server. begin repair process.
             rs.nodelistMutex.Lock()
             rs.backupConn = nil
             rs.nodelistMutex.Unlock()
             rs.lock.Unlock()
-            BeginRepair()
+            rs.BeginRepair()
             rs.lock.Lock()
             if rs.backupConn != nil {
-                err = backupConn.Call("RssStoreRPC.Unsubscribe", args, reply)
+                err = rs.backupConn.Call("RssStoreRPC.Unsubscribe", args, reply)
                 if err != nil {
                     // Then our backup has already failed again. 
                     // We give up and move on without a backup.

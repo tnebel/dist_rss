@@ -7,6 +7,9 @@ import (
 type RssStoreInterface interface {
     Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error
     Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error
+    RegisterServer(args *rssproto.RegisterArgs, reply *rssproto.RegisterReply) error
+    UpdateNodeType (args *rssproto.UpdateNodeTypeArgs, reply *rssproto.UpdateNodeTypeReply) error
+    UpdateNodeLists (args *rssproto.UpdateNodeListArgs, reply *rssproto.UpdateNodeListReply) error
 }
 
 type RssStoreRPC struct {
@@ -26,10 +29,13 @@ func (rsrpc *RssStoreRPC) Unsubscribe(args *rssproto.SubscribeArgs, reply *rsspr
 }
 
 func (rsrpc *RssStoreRPC) UpdateNodeType (args *rssproto.UpdateNodeTypeArgs, reply *rssproto.UpdateNodeTypeReply) error {
-    return rspc.rs.UpdateNodeType(args, reply)
+    return rsrpc.rs.UpdateNodeType(args, reply)
 }
 
 func (rsrpc *RssStoreRPC) UpdateNodeLists (args *rssproto.UpdateNodeListArgs, reply *rssproto.UpdateNodeListReply) error {
-    return rspc.rs.UpdateNodeLists(args, reply)
+    return rsrpc.rs.UpdateNodeLists(args, reply)
 }
 
+func (rsrpc *RssStoreRPC) RegisterServer(args *rssproto.RegisterArgs, reply *rssproto.RegisterReply) error {
+    return rsrpc.rs.RegisterServer(args, reply)
+}
