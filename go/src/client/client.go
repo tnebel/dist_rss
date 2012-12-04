@@ -15,10 +15,10 @@ const(
 
 func main(){
     var mn string
-    var sub bool
+    var sub int
 
     flag.StringVar(&mn, "m", "localhost:5001", "host:port of master node")
-    flag.BoolVar(&sub, "s", true, "true for subscribe, false for unsubscribe")
+    flag.IntVar(&sub, "s", 1, "1 for subscribe, 0 for unsubscribe")
     flag.Parse()
 
     if flag.NArg() < 2 {
@@ -35,13 +35,17 @@ func main(){
     masterconn, err := makeConnection(mn)
     if err != nil {
         fmt.Println("Could not establish connection... aborting")
+        return
     }
 
     args := &rssproto.SubscribeArgs{email, uri}
     reply := new(rssproto.SubscribeReply)
 
-    // TODO: logic if unsub
-    err = masterconn.Call("MasterNodeRPC.Subscribe", args, reply)
+    if sub > 0 {
+        err = masterconn.Call("MasterNodeRPC.Subscribe", args, reply)
+    } else {
+        err = masterconn.Call("MasterNodeRPC.Unsubscribe", args, reply)
+    }
 
     if err != nil{
         fmt.Printf("ERROR: Remote Procedure Call Failed\n")

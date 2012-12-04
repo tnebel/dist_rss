@@ -41,8 +41,6 @@ func (rsrpc *RssStoreRPC) RegisterServer(args *rssproto.RegisterArgs, reply *rss
     return rsrpc.rs.RegisterServer(args, reply)
 }
 
-
 func (rsrpc *RssStoreRPC) GetServers(args *rssproto.GetServersArgs, reply *rssproto.RegisterReply) error {
-    return rsrpc.rs.GetServers (args, reply)
+    return rsrpc.rs.GetServers(args, reply)
 }
-

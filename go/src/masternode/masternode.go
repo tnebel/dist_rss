@@ -37,9 +37,10 @@ func seedRNG() {
 }
 
 // port: port num we're running on
-// server: address of storage server to make initial connection to
+// server: address of master storage server to initially connect to
 func NewMaster(port int, server string) *MasterNode {
     mn := new(MasterNode)
+    mn.rpcClientMap = make(map[uint32]*rpc.Client)
     mn.rpcClientMapLock = new(sync.RWMutex)
     mn.rpcClientMap = make(map[string]*rpc.Client)
     mn.nodelistMutex = sync.Mutex{}
@@ -221,7 +222,7 @@ func tryConnection(hostport string) (*rpc.Client, error) {
             return srvconn, nil
         }
     }
-    fmt.Printf("Could not connect after %d attempts", RETRIES)
+    fmt.Printf("Could not connect after %d attempts\n", RETRIES)
     return nil, err
 }
 
