@@ -56,7 +56,7 @@ func main(){
     case rssproto.UNSUBFAIL:
         fmt.Printf("Subscription does not exist\n")
     default:
-        fmt.Printf("ERROR: this case should not occur\n")
+        fmt.Printf("ERROR: unrecognized status. Should receive success/fail status.\n")
     }
 }
 

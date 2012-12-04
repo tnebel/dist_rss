@@ -58,9 +58,15 @@ func NewMaster(port int, server string) *MasterNode {
         if i == 0 {
             time.Sleep(time.Second)
         }
-        _ = mn.initialConnection.Call("RssStoreRPC.GetServers", args, &reply)
-        if !reply.Ready {
+        err = mn.initialConnection.Call("RssStoreRPC.GetServers", &args, &reply)
+        if i == RETRIES - 1 {
+            fmt.Println("Could not connect to server.")
             return nil
+        } else if err != nil || !reply.Ready {
+            fmt.Println("Problem connecting to server. Retrying...")
+            i+=1
+        } else {
+            break
         }
     }
     mn.nodelistMutex.Lock()
@@ -78,6 +84,10 @@ func (mn *MasterNode) RetreiveServerLists() error {
     mn.nodelistMutex.Unlock()
 
     for numTries := 0; numTries < RETRIES; numTries++{
+        if (numTries != 0){
+            time.Sleep(100*time.Millisecond)
+        }
+        fmt.Println("Attempting to retreive a new server list")
         rand_server_idx := rand.Intn(len(nodeList))
         serverAddr := nodeList[rand_server_idx].HostPort
         conn, err := mn.getServer(serverAddr)
@@ -87,7 +97,7 @@ func (mn *MasterNode) RetreiveServerLists() error {
         }
         args := new(rssproto.GetServersArgs)
         var reply rssproto.RegisterReply
-        _ = conn.Call("RssStoreRPC.GetServers", args, &reply)
+        _ = conn.Call("RssStoreRPC.GetServers", &args, &reply)
         if !reply.Ready {
             numTries += 1
             continue
@@ -97,6 +107,7 @@ func (mn *MasterNode) RetreiveServerLists() error {
         mn.backupNodeList = reply.BackupServers
         mn.spareNodeList = reply.SpareServers
         mn.nodelistMutex.Unlock()
+        fmt.Println("Successfully obtained a new (potentially still outdated) server list")
         return nil
     }
     return errors.New("could not establish a connection with any servers to update list")
@@ -108,6 +119,7 @@ func (mn *MasterNode) Ping(args *rssproto.PingArgs, reply *rssproto.PingReply) e
 }
 
 func (mn *MasterNode) NotifyBackupOfFailure(partitionId uint32) {
+    fmt.Println("Attempting to notify backup node that Primary is down")
     mn.nodelistMutex.Lock()
     for i:=0; i<len(mn.backupNodeList); i++ {
         if mn.backupNodeList[i].NodeID == partitionId {
@@ -123,7 +135,7 @@ func (mn *MasterNode) NotifyBackupOfFailure(partitionId uint32) {
             args.NewNodeID = partitionId
             // if this call gives an error, it is likely because another app
             // node has already updated it.
-            _ = cli.Call("RssStoreRPC.UpdateNodeType", args, reply)
+            _ = cli.Call("RssStoreRPC.UpdateNodeType", &args, &reply)
             mn.nodelistMutex.Unlock()
             return
         }
@@ -133,12 +145,16 @@ func (mn *MasterNode) NotifyBackupOfFailure(partitionId uint32) {
 }
 
 func (mn *MasterNode) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error {
+    fmt.Println(fmt.Sprintf("Routing subscription request for %s to %s", args.Email, args.URI))
     uri := args.URI
     for numTries:=0; numTries<RETRIES; numTries++ {
         p_id, hp := determinePartitionID(Storehash(uri), mn.primaryNodeList)
         cli, err := mn.getServer(hp)
 
         if err != nil {
+            if numTries == 0{
+                fmt.Println("detected dead Primary node")
+            }
             mn.NotifyBackupOfFailure(p_id)
             time.Sleep(time.Second)
             mn.RetreiveServerLists()
@@ -147,6 +163,9 @@ func (mn *MasterNode) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.Su
         }
         err = cli.Call("RssStoreRPC.Subscribe", args, reply)
         if err != nil {
+            if numTries == 0{
+                fmt.Println("detected dead Primary node")
+            }
             mn.NotifyBackupOfFailure(p_id)
             time.Sleep(time.Second)
             mn.RetreiveServerLists()
@@ -161,8 +180,8 @@ func (mn *MasterNode) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.Su
 }
 
 func (mn *MasterNode) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error {
+    fmt.Println(fmt.Sprintf("Routing unsubscribe request for %s to %s", args.Email, args.URI))
     uri := args.URI
-
     for numTries:=0; numTries<RETRIES; numTries++ {
         p_id, hp := determinePartitionID(Storehash(uri), mn.primaryNodeList)
         cli, err := mn.getServer(hp)
