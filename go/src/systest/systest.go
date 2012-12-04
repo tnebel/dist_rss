@@ -10,6 +10,17 @@ import (
     "flag"
     "rssproto"
     "rssstorerpc"
+    //"log"
+    "regexp"
+)
+
+const (
+    EMAIL1 = "test1@test.com"
+    EMAIL2 = "test2@test.com"
+    EMAIL3 = "test3@test.com"
+    URI1 = "www.gmail.com"
+    URI2 = "www.facebook.com"
+    URI3 = "www.reddit.com"
 )
 
 type TestFunc struct {
@@ -22,15 +33,29 @@ var rs *rssstore.RssStore
 var testRegex *string = flag.String("t", "", "test to run")
 var passCount int
 var failCount int
+var lis net.Listener
 
 func initMaster(storage, server, myhostport string ) net.Listener {
-    l, err := net.Listen("tcp", server)
+    l := initRssStore(storage) 
+    if l == nil {
+        return nil
+    }
+    mn = masternode.NewMaster(5001, storage)
+    if mn == nil {
+        fmt.Println("Could not start master node/app logic")
+        return nil
+    }
+    return l
+}
+
+func initRssStore(storage string) net.Listener {
+    l, err := net.Listen("tcp", storage)
     if err != nil {
         fmt.Println("listen error")
         return nil
     }
 
-    rs, err = rssstore.NewRssStore(myhostport, 5002, 0)
+    rs, err = rssstore.NewRssStore(storage, 5002, 0)
     if err != nil {
         fmt.Println("Could not start rss store")
         return nil
@@ -39,13 +64,6 @@ func initMaster(storage, server, myhostport string ) net.Listener {
     rpc.Register(rsrpc)
     rpc.HandleHTTP()
     go http.Serve(l, nil)
-
-    // TODO: are these paramaters correct?
-    mn = masternode.NewMaster(5001, myhostport)
-    if mn == nil {
-        fmt.Println("Could not start master node/app logic")
-        return nil
-    }
     return l
 }
 
@@ -59,8 +77,12 @@ func cleanupMaster(l net.Listener) {
     mn = nil
 }
 
+func setup() {
+    lis = initMaster("localhost:5002", "localhost:5001", "localhost:5001") 
+}
+
 func testNonexistantRssStore() {
-    if master := masternode.NewMaster(5001, "something here"); master == nil {
+    if master := masternode.NewMaster(5001, "localhost:5002"); master == nil {
         fmt.Println("PASS")
         passCount++
     } else {
@@ -71,32 +93,106 @@ func testNonexistantRssStore() {
 }
 
 func testSubscribe() {
-    email := "tmnebel@gmail.com"
-    uri := "www.google.com"
-    status := subscribe(mn, email, uri)
-    checkStatus(rssproto.SUBSUCCESS, status)
+    setup()
+    defer cleanupMaster(lis)
+    status := subscribe(mn, EMAIL1, URI1, true)
+    checkStatus(rssproto.SUBSUCCESS, status, true)
 }
 
-func checkStatus(expected, result int) int {
-    if expected == result {
-        fmt.Println("PASS")
-        passCount++
-    } else {
-        fmt.Println("FAIL")
-        failCount++
+func testMultSubscribe() {
+    setup()
+    defer cleanupMaster(lis)
+    status := subscribe(mn, EMAIL1, URI1, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return 
     }
+    status = subscribe(mn, EMAIL2, URI1, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL3, URI1, true)
+    checkStatus(rssproto.SUBSUCCESS, status, true) 
 }
 
-func subscribe(mn *masternode.MasterNode, email, uri string) int {
+func testMultSubscribeDiffURI() {
+    setup()
+    defer cleanupMaster(lis)
+    status := subscribe(mn, EMAIL1, URI1, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return 
+    }
+    status = subscribe(mn, EMAIL2, URI2, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL3, URI3, true)
+    checkStatus(rssproto.SUBSUCCESS, status, true) 
+}
+
+func testUnsubscribe1() {
+    setup()
+    defer cleanupMaster(lis)
+    status := subscribe(mn, EMAIL1, URI1, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI1, false)
+    checkStatus(rssproto.UNSUBSUCCESS, status, true)
+}
+
+func testUnsubscribe2() {
+    setup()
+    defer cleanupMaster(lis)
+    status := subscribe(mn, EMAIL1, URI1, false)
+    checkStatus(rssproto.UNSUBFAIL, status, true)
+}
+
+func testUnsubscribe3() {
+    setup()
+    defer cleanupMaster(lis)
+    status := subscribe(mn, EMAIL1, URI1, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI2, false)
+    if !checkStatus(rssproto.UNSUBFAIL, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI1, false)
+    checkStatus(rssproto.UNSUBSUCCESS, status, true)
+}
+
+
+// final == true means that this is the final call to checkStatus
+// within a test, thus if expected == result, log the PASS
+// a expected != result always logs as a FAIL
+func checkStatus(expected, result int, final bool) bool {
+    if expected == result {
+        if final {
+            fmt.Println("PASS")
+            passCount++
+        }
+        return true
+    }
+    fmt.Println("FAIL")
+    failCount++
+    return false
+}
+
+// pass true to subscribe param to do sub, or false for unsub
+func subscribe(mn *masternode.MasterNode, email, uri string, subscribe bool) int {
     args := &rssproto.SubscribeArgs{email, uri}
     reply := new(rssproto.SubscribeReply)
-
-    mn.Subscribe(args, reply)
+    if subscribe {
+        mn.Subscribe(args, reply)
+    } else {
+        mn.Unsubscribe(args, reply)
+    }
     return reply.Status
 }
 
 func main() {
-	var err error
+	//var err error
 	//output = os.Stderr
 	passCount = 0
 	failCount = 0
@@ -104,24 +200,34 @@ func main() {
     initTests := []TestFunc{
 		TestFunc{"testNonexistantRssStore", testNonexistantRssStore}}
 	tests := []TestFunc{
-		TestFunc{"testSubscribe", testSubscribe}}
+		TestFunc{"testSubscribe", testSubscribe},
+		TestFunc{"testMultSubscribe", testMultSubscribe},
+		TestFunc{"testMultSubscribeDiffURI", testMultSubscribeDiffURI},
+		TestFunc{"testUnsubscribe1", testUnsubscribe1},
+		TestFunc{"testUnsubscribe2", testUnsubscribe2},
+		TestFunc{"testUnsubscribe3", testUnsubscribe3}}
 
+    /*
 	flag.Parse()
 	if (flag.NArg() < 1) {
         log.Fatal("usage:  libtest <storage master node>")
 	}
+    */
 
     for _, t := range initTests {
         if b, err := regexp.MatchString(*testRegex, t.name); b && err == nil {
             fmt.Println("Starting " + t.name + ":")
-            t.f()
+            //t.f()
         }
     }
 
-	mn := initMaster(flag.Arg(0), fmt.Sprintf("localhost:%d", *portnum), fmt.Sprintf("localhost:%d", *portnum), libstore.NONE)
-	if mn == nil {
+	//mn := initMaster(flag.Arg(0), fmt.Sprintf("localhost:%d", *portnum), fmt.Sprintf("localhost:%d", *portnum))
+    /*
+    lis = initMaster("localhost:5002", "localhost:5001", "localhost:5001") 
+	if lis == nil {
 		return
 	}
+    */
 
 	// Run tests
 	for _, t := range tests {
