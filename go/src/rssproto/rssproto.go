@@ -12,6 +12,13 @@ const (
     UNSUBFAIL
     NOCONNECTION
     EWRONGSERVER
+    BACKUP
+    PRIMARY
+    SPARE
+    TYPECHANGESUCCESS
+    TYPECHANGEFAILURE
+    LISTUPDATESUCCESS
+    LISTUPDATEFAILURE
 )
 
 type SubscribeArgs struct {
@@ -52,8 +59,12 @@ type RegisterArgs struct {
 }
 
 type RegisterReply struct {
+    NodeType uint
+    NodeID uint32
     Ready bool
-    Servers []Node 
+    PrimaryServers []Node
+    BackupServers []Node
+    SpareServers []Node
 }
 
 type Node struct {
@@ -62,4 +73,23 @@ type Node struct {
 }
 
 type GetServersArgs struct {
+}
+
+type UpdateNodeTypeArgs struct {
+    NewNodeType int
+    NewNodeID uint32
+}
+
+type UpdateNodeTypeReply struct {
+    Status int
+}
+
+type UpdateNodeListArgs struct {
+    NewPrimary Node
+    NewBackup Node
+    NewSpare Node
+}
+
+type UpdateNodeListReply struct {
+    Status int
 }

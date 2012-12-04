@@ -155,6 +155,7 @@ func (mn *MasterNode) getServer(key string) (*rpc.Client, error) {
             break
         }
     }
+    //TODO consider checking cache again
     cli, err := rpc.DialHTTP("tcp", hp)
     if err != nil {
         return nil, err
