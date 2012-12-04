@@ -72,7 +72,8 @@ func NewRssStore(master string, portnum int, numNodes int, numSpareNodes int) (*
     rs.rpcClientMap = make(map[string]*rpc.Client)
     rs.clientMapLock = &sync.RWMutex{}
 
-    go  rs.RegisterWithMaster(master)
+    go rs.RegisterWithMaster(master)
+    go rs.CheckAll()
     return rs, nil
 }
 
@@ -204,7 +205,7 @@ func (rs *RssStore) RegisterWithMaster(master string) error {
 
 func (rs *RssStore) GetServers(args *rssproto.GetServersArgs, reply *rssproto.RegisterReply) error {
     rs.nodelistMutex.Lock()
-    if len(reply.PrimaryServers) == 0 && rs.numPrimaryNodes == 0{
+    if len(rs.primaryNodeList) == 0 && rs.numPrimaryNodes == 0{
         // then we are not the master node and we have not successfully called getservers
         rs.nodelistMutex.Unlock()
         reply.PrimaryServers = rs.primaryNodeList
@@ -284,6 +285,7 @@ func (rs *RssStore) BeginRepair () error {
     }
     for i:=0; i<len(rs.spareNodeList); i++ {
         // request node change from spares (release nodelist lock before this call)
+        // TODO detect dead spare nodes and broadcast change here
         fmt.Println(fmt.Sprintf("attempting to contact spare %d of %d", i+1, len(rs.spareNodeList)))
         nextSpare := rs.spareNodeList[i]
         var args rssproto.UpdateNodeTypeArgs
@@ -296,7 +298,6 @@ func (rs *RssStore) BeginRepair () error {
             fmt.Println(err)
             continue
         }
-        //TODO do we want to unlock stuff before our rpc call? if we do, we'll have to do some stuff to ensure no other repair calls go through
         err = cli.Call("RssStoreRPC.UpdateNodeType", &args, &reply)
         if err != nil || reply.Status != rssproto.TYPECHANGESUCCESS {
             fmt.Println("Error in rpc call to update spare node type")

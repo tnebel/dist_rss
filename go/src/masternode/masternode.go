@@ -127,6 +127,7 @@ func (mn *MasterNode) NotifyBackupOfFailure(partitionId uint32) {
             if (err != nil){
                 // instead of panicing, return and hope that the a call 
                 // to retreive servers will save us in the future
+                mn.nodelistMutex.Unlock()
                 return
             }
             var args rssproto.UpdateNodeTypeArgs
@@ -275,6 +276,7 @@ func (mn *MasterNode) getServer(serverAddr string) (*rpc.Client, error) {
     //TODO consider checking cache again
     cli, err := rpc.DialHTTP("tcp", serverAddr)
     if err != nil {
+        mn.rpcClientMapLock.Unlock()
         return nil, err
     }
     mn.rpcClientMap[serverAddr] = cli
