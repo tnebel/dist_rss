@@ -219,7 +219,7 @@ func (rs *RssStore) UpdateNodeType (args *rssproto.UpdateNodeTypeArgs, reply *rs
         rs.nodelistMutex.Unlock()
         var args UpdateNodeListArgs
         args.NewPrimary = rssproto.Node{rs.HostPort, rs.nodeId}
-        _ := BroadcastUpdate(args)
+        go BroadcastUpdate(args)
         BeginRepair()
     } else if ( rs.nodeType == rssproto.SPARE && requestedType == rssproto.BACKUP ) {
         // Then a node is requesting that we become a backup node.
@@ -231,7 +231,7 @@ func (rs *RssStore) UpdateNodeType (args *rssproto.UpdateNodeTypeArgs, reply *rs
         rs.nodelistMutex.Unlock()
         var args UpdateNodeListArgs
         args.NewBackup = rssproto.Node{rs.HostPort, newNodeID}
-        _ := BroadcastUpdate(args)
+        go BroadcastUpdate(args)
     } else {
         // then the request is outdated--the other node has made a request and is not updated
         rs.lock.Unlock()
@@ -244,11 +244,56 @@ func (rs *RssStore) BeginRepair () error {
     //TODO Check to make sure we have not already repaired! (backupConn == nil)
     //TODO make requests to get a spare to agree to be our backup
     //TODO BE CAREFUL W/ SYSTEM DEADLOCK!
-    //  -set our backup node to nil
-    //  -request node change from spares (release nodelist lock before this call)
-    //  -when we get a spare to agree to become the backup, lock stuff up again
-    //  -iterate over all data, make a bunch of subscribe calls to backup
-    //  -release locks--we're done here.
+    rs.lock.Lock()
+    rs.nodelistMutex.Lock()
+    if rs.backupConn !=nil {
+        // Then the system has already been repaired.
+        rs.lock.Unlock()
+        rs.nodelistMutex.Unlock()
+        return nil
+    }
+    for i:=0; i<len(rs.spareNodeList); ++i {
+        // request node change from spares (release nodelist lock before this call)
+        nextSpare := rs.spareNodeList[i]
+        var args UpdateNodeTypeArgs
+        var reply UpdateNodeTypeReply
+        args.NewNodeType = rssproto.BACKUP
+        args.NewNodeID = rs.nodeId
+        //TODO do we want to unlock stuff before our rpc call? if we do, we'll have to do some stuff to ensure no other repair calls go through
+        err = cli.Call("RssStoreRPC.UpdateNodeType", args, reply)
+        if err != nil || reply.Status != TYPECHANGESUCCESS {
+            continue
+        } else {
+            rs.backupConn = getConnection(nextSpare.HostPort)
+            break
+        }
+    }
+    if (rs.backupConn == nil) {
+        fmt.Println("Could not establish new backup server. Out of spares.")
+        rs.lock.Unlock()
+        rs.nodelistMutex.Unlock()
+        return errors.New("Could not establish new backup server")
+    }
+    // if we've made it to this point, we have a connection to a new backup server.
+    // We have to transfer all our data to this new backup server.
+    for uri, rssInfo := range rs.uriToInfo {
+        for email, sub := range rssInfo.subscriptions {
+            var args *rssproto.SubscribeArgs
+            var reply *rssproto.SubscribeReply
+            args.Email = email
+            args.URI = uri
+            err = rs.backupConn.Call("RssStoreRPC.Subscribe", args, reply)
+            if err != nil {
+                //then we already lost our backup connection. move on without a backup
+                rs.backupConn = nil
+                rs.lock.Unlock()
+                rs.nodelistMutex.Unlock()
+                return errors.New("Could not establish new backup server")
+            }
+        }
+    }
+    rs.lock.Unlock()
+    rs.nodelistMutex.Unlock()
 }
 
 func (rs *RssStore) UpdateNodeLists (args *rssproto.UpdateNodeListArgs, reply *rssproto.UpdateNodeListReply) error {
@@ -406,13 +451,15 @@ func (rs *RssStore) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.Subs
             rs.lock.Unlock()
             BeginRepair()
             rs.lock.Lock()
-            err = backupConn.Call("RssStoreRPC.Subscribe", args, reply)
-            if err != nil {
-                // Then our backup has already failed again. 
-                // We give up and move on without a backup.
-                rs.nodelistMutex.Lock()
-                rs.backupConn = nil
-                rs.nodelistMutex.Unlock()
+            if rs.backupConn != nil {
+                err = backupConn.Call("RssStoreRPC.Subscribe", args, reply)
+                if err != nil {
+                    // Then our backup has already failed again. 
+                    // We give up and move on without a backup.
+                    rs.nodelistMutex.Lock()
+                    rs.backupConn = nil
+                    rs.nodelistMutex.Unlock()
+                }
             }
         } else if reply.Status != rssproto.SUBSUCCESS{
             rs.lock.Unlock()
@@ -457,9 +504,24 @@ func (rs *RssStore) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.Su
         err = cli.Call("RssStoreRPC.Unsubscribe", args, reply)
         if err != nil {
             // then we've lost our backup server. begin repair process.
-            // TODO repair
-            // TODO retry backup call
+            rs.nodelistMutex.Lock()
+            rs.backupConn = nil
+            rs.nodelistMutex.Unlock()
+            rs.lock.Unlock()
+            BeginRepair()
+            rs.lock.Lock()
+            if rs.backupConn != nil {
+                err = backupConn.Call("RssStoreRPC.Unsubscribe", args, reply)
+                if err != nil {
+                    // Then our backup has already failed again. 
+                    // We give up and move on without a backup.
+                    rs.nodelistMutex.Lock()
+                    rs.backupConn = nil
+                    rs.nodelistMutex.Unlock()
+                }
+            }
         } else if reply.Status != rssproto.UNSUBSUCCESS{
+            rs.lock.Unlock()
             return nil
         }
     }
