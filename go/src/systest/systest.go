@@ -34,9 +34,10 @@ var testRegex *string = flag.String("t", "", "test to run")
 var passCount int
 var failCount int
 var lis net.Listener
+var lis2 net.Listener
 
 func initMaster(storage, server, myhostport string ) net.Listener {
-    l := initRssStore(storage) 
+    l := initRssStore(storage, 5002, 0) 
     if l == nil {
         return nil
     }
@@ -48,14 +49,28 @@ func initMaster(storage, server, myhostport string ) net.Listener {
     return l
 }
 
-func initRssStore(storage string) net.Listener {
+func initMasterWithTwoRssStores(storage, server, myhostport string ) net.Listener {
+    l := initTwoRssStore("locahost:5002", "localhost:5003")
+    if l == nil {
+        return nil
+    }
+    mn = masternode.NewMaster(5001, storage)
+    if mn == nil {
+        fmt.Println("Could not start master node/app logic")
+        return nil
+    }
+    return l
+}
+
+func initRssStore(storage string, masterport, numNodes int) net.Listener {
     l, err := net.Listen("tcp", storage)
     if err != nil {
         fmt.Println("listen error")
+        fmt.Println(err)
         return nil
     }
 
-    rs, err = rssstore.NewRssStore(storage, 5002, 0)
+    rs, err = rssstore.NewRssStore(storage, masterport, numNodes)
     if err != nil {
         fmt.Println("Could not start rss store")
         return nil
@@ -65,6 +80,15 @@ func initRssStore(storage string) net.Listener {
     rpc.HandleHTTP()
     go http.Serve(l, nil)
     return l
+}
+
+func initTwoRssStore(masterStorage, secondStorage string) net.Listener {
+    l1 := initRssStore(masterStorage, 5002, 2) 
+    l2 := initRssStore(secondStorage, 5002, 0)
+    if l1 != nil && l2 != nil {
+        return l1
+    }
+    return nil
 }
 
 func cleanupMaster(l net.Listener) {
@@ -79,6 +103,10 @@ func cleanupMaster(l net.Listener) {
 
 func setup() {
     lis = initMaster("localhost:5002", "localhost:5001", "localhost:5001") 
+}
+
+func setup2() {
+    lis = initMasterWithTwoRssStores("localhost:5002", "localhost:5001", "localhost:5001") 
 }
 
 func testNonexistantRssStore() {
@@ -162,6 +190,20 @@ func testUnsubscribe3() {
     checkStatus(rssproto.UNSUBSUCCESS, status, true)
 }
 
+func testSubTwoRssStores() {
+    setup2()
+    status := subscribe(mn, EMAIL1, URI1, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return 
+    }
+    status = subscribe(mn, EMAIL2, URI1, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL3, URI1, true)
+    checkStatus(rssproto.SUBSUCCESS, status, true) 
+}
+
 
 // final == true means that this is the final call to checkStatus
 // within a test, thus if expected == result, log the PASS
@@ -206,6 +248,7 @@ func main() {
 		TestFunc{"testUnsubscribe1", testUnsubscribe1},
 		TestFunc{"testUnsubscribe2", testUnsubscribe2},
 		TestFunc{"testUnsubscribe3", testUnsubscribe3}}
+	//	TestFunc{"testSubTwoRssStores", testSubTwoRssStores}}
 
     /*
 	flag.Parse()
