@@ -78,20 +78,24 @@ func NewRssStore(master string, portnum int, numNodes int, numSpareNodes int) (*
 
 
 func (rs *RssStore) RegisterServer(args *rssproto.RegisterArgs, reply *rssproto.RegisterReply) error {
+    fmt.Println("attempting to register server...")
     rs.nodelistMutex.Lock()
     if (rs.numPrimariesRegistered < rs.numPrimaryNodes){
         // Then we will register this node as a primary node
         seedRNG()
         reply.NodeID = rand.Uint32()
+        reply.NodeType = rssproto.PRIMARY
         rs.primaryNodeList = append(rs.primaryNodeList, rssproto.Node{args.ServerInfo.HostPort, reply.NodeID})
         rs.numPrimariesRegistered += 1
     } else if (rs.numBackupsRegistered < rs.numPrimaryNodes){
         // Then we will register this node as a backup node
         reply.NodeID = rs.primaryNodeList[rs.numBackupsRegistered].NodeID
+        reply.NodeType = rssproto.BACKUP
         rs.backupNodeList = append(rs.backupNodeList, rssproto.Node{args.ServerInfo.HostPort, reply.NodeID})
         rs.numBackupsRegistered += 1
     } else {
         reply.NodeID = 0
+        reply.NodeType = rssproto.SPARE
         rs.spareNodeList = append(rs.spareNodeList, rssproto.Node{args.ServerInfo.HostPort, reply.NodeID})
         rs.numSparesRegistered += 1
     }
@@ -104,10 +108,20 @@ func (rs *RssStore) RegisterServer(args *rssproto.RegisterArgs, reply *rssproto.
     reply.BackupServers = rs.backupNodeList
     reply.SpareServers = rs.spareNodeList
     rs.nodelistMutex.Unlock()
+
+    if reply.NodeType == rssproto.PRIMARY {
+        fmt.Println("Registered a server as a primary node")
+    } else if reply.NodeType == rssproto.BACKUP {
+        fmt.Println("Registered a server as a backup node")
+    } else {
+        fmt.Println("Registered a server as a spare node")
+    }
+
     return nil
 }
 
 func (rs *RssStore) RegisterWithMaster(master string) error {
+    fmt.Println("attempting to register with Master server...")
     numTries := 0
     var client *rpc.Client
     for client == nil {
@@ -129,7 +143,8 @@ func (rs *RssStore) RegisterWithMaster(master string) error {
     numTries = 0
     args := rssproto.RegisterArgs{rssproto.Node{fmt.Sprintf("localhost:%d", rs.portnum), rs.nodeId}}
     var reply rssproto.RegisterReply
-    for !rs.registered {
+    finishedRegistration := false
+    for !finishedRegistration {
         if numTries == RETRIES {
             fmt.Println("Could not register with server")
             return errors.New("Could not register with server.")
@@ -138,6 +153,8 @@ func (rs *RssStore) RegisterWithMaster(master string) error {
         if err != nil {
             numTries += 1
             time.Sleep(time.Second)
+        } else {
+            finishedRegistration = true
         }
     }
 
@@ -180,14 +197,15 @@ func (rs *RssStore) RegisterWithMaster(master string) error {
     }
     rs.registered = true
     rs.registrationSignalCh <- true
+    fmt.Println("Successfully registered with master")
     return nil
 }
 
 func (rs *RssStore) GetServers(args *rssproto.GetServersArgs, reply *rssproto.RegisterReply) error {
     rs.nodelistMutex.Lock()
-    if len(reply.PrimaryServers) == 0 {
-        // then we are obviously not ready. If this condition is true for non-master nodes,
-        // then they have not managed to get servers yet. Otherwise, they are certainly ready.
+    if len(reply.PrimaryServers) == 0 && rs.numPrimaryNodes == 0{
+        // then we are not the master node and we have not successfully called getservers
+        rs.nodelistMutex.Unlock()
         reply.Ready = false;
         return nil
     }

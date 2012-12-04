@@ -41,6 +41,7 @@ func seedRNG() {
 func NewMaster(port int, server string) *MasterNode {
     mn := new(MasterNode)
     mn.rpcClientMapLock = new(sync.RWMutex)
+    mn.rpcClientMap = make(map[string]*rpc.Client)
     mn.nodelistMutex = sync.Mutex{}
 
     mn.initialServer = server

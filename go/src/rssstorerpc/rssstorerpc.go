@@ -10,6 +10,7 @@ type RssStoreInterface interface {
     RegisterServer(args *rssproto.RegisterArgs, reply *rssproto.RegisterReply) error
     UpdateNodeType (args *rssproto.UpdateNodeTypeArgs, reply *rssproto.UpdateNodeTypeReply) error
     UpdateNodeLists (args *rssproto.UpdateNodeListArgs, reply *rssproto.UpdateNodeListReply) error
+    GetServers(args *rssproto.GetServersArgs, reply *rssproto.RegisterReply) error 
 }
 
 type RssStoreRPC struct {
@@ -39,3 +40,9 @@ func (rsrpc *RssStoreRPC) UpdateNodeLists (args *rssproto.UpdateNodeListArgs, re
 func (rsrpc *RssStoreRPC) RegisterServer(args *rssproto.RegisterArgs, reply *rssproto.RegisterReply) error {
     return rsrpc.rs.RegisterServer(args, reply)
 }
+
+
+func (rsrpc *RssStoreRPC) GetServers(args *rssproto.GetServersArgs, reply *rssproto.RegisterReply) error {
+    return rsrpc.rs.GetServers (args, reply)
+}
+
