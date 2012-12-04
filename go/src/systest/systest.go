@@ -50,7 +50,7 @@ func initMaster(storage, server, myhostport string ) net.Listener {
 }
 
 func initMasterWithTwoRssStores(storage, server, myhostport string ) net.Listener {
-    l := initTwoRssStore("locahost:5002", "localhost:5003")
+    l := initTwoRssStore("localhost:5002", "localhost:5003")
     if l == nil {
         return nil
     }
@@ -63,10 +63,10 @@ func initMasterWithTwoRssStores(storage, server, myhostport string ) net.Listene
 }
 
 func initRssStore(storage string, masterport, numNodes int) net.Listener {
+    defer fmt.Println("Leaving initRssStore")
     l, err := net.Listen("tcp", storage)
     if err != nil {
         fmt.Println("listen error")
-        fmt.Println(err)
         return nil
     }
 
@@ -248,7 +248,6 @@ func main() {
 		TestFunc{"testUnsubscribe1", testUnsubscribe1},
 		TestFunc{"testUnsubscribe2", testUnsubscribe2},
 		TestFunc{"testUnsubscribe3", testUnsubscribe3}}
-	//	TestFunc{"testSubTwoRssStores", testSubTwoRssStores}}
 
     /*
 	flag.Parse()
