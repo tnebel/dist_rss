@@ -141,7 +141,6 @@ func (mn *MasterNode) NotifyBackupOfFailure(partitionId uint32) {
             return
         }
     }
-
     mn.nodelistMutex.Unlock()
 }
 

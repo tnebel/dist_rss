@@ -13,17 +13,19 @@ import (
 func main() {
     var mn string
     var port int
-    var numNodes int
+    var numPrimaryNodes int
+    var numBackupNodes int
     var numSpareNodes int
 
     flag.StringVar(&mn, "m", "localhost:5002", "hostport of master storage node")
     flag.IntVar(&port, "p", 5002, "Listening port of rssstore")
-    flag.IntVar(&numNodes, "N", 0, "Become the master.  Specifies the number of primary nodes in the system. All primary nodes are expected to have backup nodes, also.")
-    flag.IntVar(&numSpareNodes, "S", 0, "Become the master.  Specifies the number of spare nodes in the system.")
+    flag.IntVar(&numPrimaryNodes, "N", 0, "Become the master.  Specifies the number of primary nodes in the system.")
+    flag.IntVar(&numBackupNodes, "B", 0, "Specifies the number of backup nodes in the system initially.")
+    flag.IntVar(&numSpareNodes, "S", 0, "Specifies the number of spare nodes in the system.")
 
     flag.Parse()
 
-    rs, err := rssstore.NewRssStore(mn, port, numNodes, numSpareNodes)
+    rs, err := rssstore.NewRssStore(mn, port, numPrimaryNodes, numBackupNodes, numSpareNodes)
 
     if err != nil {
         fmt.Printf("Error in creating rss store")
