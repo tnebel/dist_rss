@@ -54,13 +54,13 @@ func testFailover() {
     if !checkStatus(rssproto.SUBSUCCESS, status, false) {
         return
     }
-    kill(pid)
-    kill(pid)
+    kill(pidp1)
+    kill(pidp2)
     status = subscribe(mn, EMAIL1, URI1, false)
     checkStatus(rssproto.UNSUBSUCCESS, status, true)
 }
 
-fun kill(pid int) {
+func kill(pid int) {
     kill := exec.Command("kill -9", pid)
     err := kill.Start()
     if err != nil {
@@ -73,13 +73,90 @@ fun kill(pid int) {
 // kill primary
 // kill new primary, now spare will be in place as primary
 // check that the spare(new primary) has expected state
+func testUseSpare() {
+    status := subscribe(mn, EMAIL1, URI1, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI2, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI3, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    kill(pidp1)
+    kill(pidb1)
+    status = subscribe(mn, EMAIL1, URI1, false)
+    checkStatus(rssproto.UNSUBSUCCESS, status, true)
+}
 
 // kill the spare
-// doesn't fuck shit up
+// see that it doesn't mess up too much stuff
+func testKillSpare() {
+    status := subscribe(mn, EMAIL1, URI1, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI2, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI3, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    // kill the spare
+    kill(pids)
+    status := subscribe(mn, EMAIL1, URI1, false)
+    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI2, false)
+    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI3, false)
+    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
+        return
+    }
+}
+
 
 // kill the backup
 // kill primary
 // check state
+func testKillBackupAndSpare() {
+    status := subscribe(mn, EMAIL1, URI1, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI2, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI3, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    // kill the spare
+    kill(pidb1)
+    kill(pidb2)
+    kill(pids)
+    status := subscribe(mn, EMAIL1, URI1, false)
+    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI2, false)
+    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI3, false)
+    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
+        return
+    }
+}
 
 // final == true means that this is the final call to checkStatus
 // within a test, thus if expected == result, log the PASS
