@@ -8,6 +8,7 @@ const (
     _ = iota
     OK
     SUBSUCCESS
+    SUBFAIL
     UNSUBSUCCESS
     UNSUBFAIL
     NOCONNECTION
