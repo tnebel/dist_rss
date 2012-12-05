@@ -25,8 +25,7 @@ func main(){
         fmt.Printf("Please supply user email and URI to subscribe to.\n", flag.NArg())
         return
     }
-    if flag.NArg() > 2 {
-        fmt.Printf("Too many arguments provided.\n")
+    if flag.NArg() > 2 { fmt.Printf("Too many arguments provided.\n")
         return
     }
     email := flag.Arg(0)
@@ -55,6 +54,8 @@ func main(){
     switch reply.Status {
     case rssproto.SUBSUCCESS:
         fmt.Printf("Subscription Successful\n")
+    case rssproto.SUBFAIL:
+        fmt.Printf("Subscription already existed\n")
     case rssproto.UNSUBSUCCESS:
         fmt.Printf("Unsubscribe successful\n")
     case rssproto.UNSUBFAIL:

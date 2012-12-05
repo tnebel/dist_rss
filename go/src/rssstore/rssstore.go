@@ -523,8 +523,15 @@ func (rs *RssStore) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.Subs
         rssInfo.subscriptions = make(map[string]bool)
         rs.uriToInfo[uri] = rssInfo
     }
-    rssInfo.subscriptions[email] = true
-    reply.Status = rssproto.SUBSUCCESS
+    //rssInfo.subscriptions[email] = true
+    _, ok = rssInfo.subscriptions[email]
+    if !ok {
+        rssInfo.subscriptions[email] = true
+        reply.Status = rssproto.SUBSUCCESS
+    } else {
+        // already existed
+        reply.Status = rssproto.SUBFAIL
+    }
     rs.lock.Unlock()
     return nil
 }
