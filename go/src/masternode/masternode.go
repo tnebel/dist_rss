@@ -167,7 +167,7 @@ func (mn *MasterNode) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.Su
                 fmt.Println("detected dead Primary node")
             }
             mn.NotifyBackupOfFailure(p_id)
-            time.Sleep(time.Second)
+            time.Sleep(time.Second*3)
             mn.RetreiveServerLists()
             numTries += 1
             continue
@@ -180,7 +180,7 @@ func (mn *MasterNode) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.Su
                 fmt.Println("detected dead Primary node")
             }
             mn.NotifyBackupOfFailure(p_id)
-            time.Sleep(time.Second)
+            time.Sleep(time.Second*3)
             mn.RetreiveServerLists()
             numTries += 1
             continue
@@ -206,7 +206,7 @@ func (mn *MasterNode) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.
             fmt.Println("Trouble reaching primary node. Retrying:")
             fmt.Println(err)
             mn.NotifyBackupOfFailure(p_id)
-            time.Sleep(time.Second)
+            time.Sleep(time.Second*3)
             mn.RetreiveServerLists()
             numTries += 1
             continue
@@ -216,7 +216,7 @@ func (mn *MasterNode) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.
             fmt.Println("Trouble in RPC call to primary node. Retrying")
             fmt.Println(err)
             mn.NotifyBackupOfFailure(p_id)
-            time.Sleep(time.Second)
+            time.Sleep(time.Second*3)
             mn.RetreiveServerLists()
             numTries += 1
             continue

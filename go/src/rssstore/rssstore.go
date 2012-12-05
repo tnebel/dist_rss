@@ -272,9 +272,9 @@ func (rs *RssStore) UpdateNodeType (args *rssproto.UpdateNodeTypeArgs, reply *rs
         rs.lock.Unlock()
         rs.nodelistMutex.Unlock()
         var args rssproto.UpdateNodeListArgs
-        args.NewPrimary = rssproto.Node{}
+        args.NewPrimary = rssproto.Node{"",0}
         args.NewBackup = rssproto.Node{rs.hostport, newNodeID}
-        args.NewSpare = rssproto.Node{}
+        args.NewSpare = rssproto.Node{"",0}
         go rs.BroadcastUpdate(args)
     } else {
         // then the request is outdated--the other node has made a request and is not updated
@@ -397,6 +397,7 @@ func (rs *RssStore) BroadcastUpdate (args rssproto.UpdateNodeListArgs) error {
     var reply rssproto.UpdateNodeTypeReply
     var nextNode rssproto.Node
     for i:=0; i< len(nodeList); i++ {
+        fmt.Println(fmt.Sprintf("trying to update a list on another server. %d/%d", i+1, len(nodeList)))
         nextNode = nodeList[i]
         cli, err := rs.getConnection(nextNode.HostPort)
         if err != nil {
@@ -613,7 +614,6 @@ func (rs *RssStore) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.Su
 func (rs *RssStore) CheckAll() {
     for {
         rs.lock.Lock()
-        rs.nodelistMutex.Lock()
         if rs.nodeType == rssproto.PRIMARY {
             for uri, rssInfo := range rs.uriToInfo {
                 if CheckRSS(uri, rssInfo) {
@@ -622,8 +622,7 @@ func (rs *RssStore) CheckAll() {
             }
         }
         rs.lock.Unlock()
-        rs.nodelistMutex.Unlock()
-        time.Sleep(time.Duration(5) * time.Second)
+        time.Sleep(10 * time.Second)
     }
 }
 
