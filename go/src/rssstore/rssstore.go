@@ -548,7 +548,7 @@ func (rs *RssStore) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.Subs
 }
 
 func (rs *RssStore) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) (error) {
-    fmt.Println(fmt.Sprintf("Received subscribe request for %s to %s", args.Email, args.URI))
+    fmt.Println(fmt.Sprintf("Received unsubscribe request for %s to %s", args.Email, args.URI))
     if !rs.isRegistered() {
         fmt.Println("Could not register with master server")
         return errors.New("Could not register with master server")
