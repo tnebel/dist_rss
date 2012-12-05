@@ -9,7 +9,6 @@ import (
     "fmt"
     "flag"
     "rssproto"
-    "rssstorerpc"
     //"log"
     "regexp"
 )
@@ -36,37 +35,13 @@ var failCount int
 var lis net.Listener
 var lis2 net.Listener
 
-func initMaster(storage, server, myhostport string ) net.Listener {
-    l := initRssStore(storage, 5002, 1, 0) 
-    if l == nil {
-        return nil
-    }
+func initMaster(storage, server, myhostport string ) bool {
     mn = masternode.NewMaster(5001, storage)
     if mn == nil {
         fmt.Println("Could not start master node/app logic")
-        return nil
+        return false
     }
-    return l
-}
-
-func initRssStore(storage string, masterport, numNodes, numSpares int) net.Listener {
-    defer fmt.Println("Leaving initRssStore")
-    l, err := net.Listen("tcp", storage)
-    if err != nil {
-        fmt.Println("listen error")
-        return nil
-    }
-
-    rs, err = rssstore.NewRssStore(storage, masterport, numNodes, 0, numSpares)
-    if err != nil {
-        fmt.Println("Could not start rss store")
-        return nil
-    }
-    rsrpc := rssstorerpc.NewRssStoreRPC(rs)
-    rpc.Register(rsrpc)
-    rpc.HandleHTTP()
-    go http.Serve(l, nil)
-    return l
+    return true
 }
 
 func cleanupMaster(l net.Listener) {
@@ -79,8 +54,8 @@ func cleanupMaster(l net.Listener) {
     mn = nil
 }
 
-func setup() {
-    lis = initMaster("localhost:5002", "localhost:5001", "localhost:5001") 
+func setup() bool {
+    return initMaster("localhost:5002", "localhost:5001", "localhost:5001") 
 }
 
 func testNonexistantRssStore() {
@@ -95,15 +70,15 @@ func testNonexistantRssStore() {
 }
 
 func testSubscribe() {
-    setup()
-    defer cleanupMaster(lis)
     status := subscribe(mn, EMAIL1, URI1, true)
-    checkStatus(rssproto.SUBSUCCESS, status, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI1, false)
+    checkStatus(rssproto.UNSUBSUCCESS, status, true)
 }
 
 func testMultSubscribe() {
-    setup()
-    defer cleanupMaster(lis)
     status := subscribe(mn, EMAIL1, URI1, true)
     if !checkStatus(rssproto.SUBSUCCESS, status, false) {
         return 
@@ -113,12 +88,22 @@ func testMultSubscribe() {
         return
     }
     status = subscribe(mn, EMAIL3, URI1, true)
-    checkStatus(rssproto.SUBSUCCESS, status, true) 
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI1, false)
+    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL2, URI1, false)
+    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL3, URI1, false)
+    checkStatus(rssproto.UNSUBSUCCESS, status, true)
 }
 
 func testMultSubscribeDiffURI() {
-    setup()
-    defer cleanupMaster(lis)
     status := subscribe(mn, EMAIL1, URI1, true)
     if !checkStatus(rssproto.SUBSUCCESS, status, false) {
         return 
@@ -129,11 +114,12 @@ func testMultSubscribeDiffURI() {
     }
     status = subscribe(mn, EMAIL3, URI3, true)
     checkStatus(rssproto.SUBSUCCESS, status, true) 
+    subscribe(mn, EMAIL1, URI1, false)
+    subscribe(mn, EMAIL2, URI2, false)
+    subscribe(mn, EMAIL3, URI3, false)
 }
 
 func testUnsubscribe1() {
-    setup()
-    defer cleanupMaster(lis)
     status := subscribe(mn, EMAIL1, URI1, true)
     if !checkStatus(rssproto.SUBSUCCESS, status, false) {
         return
@@ -143,15 +129,11 @@ func testUnsubscribe1() {
 }
 
 func testUnsubscribe2() {
-    setup()
-    defer cleanupMaster(lis)
     status := subscribe(mn, EMAIL1, URI1, false)
     checkStatus(rssproto.UNSUBFAIL, status, true)
 }
 
 func testUnsubscribe3() {
-    setup()
-    defer cleanupMaster(lis)
     status := subscribe(mn, EMAIL1, URI1, true)
     if !checkStatus(rssproto.SUBSUCCESS, status, false) {
         return
@@ -165,19 +147,16 @@ func testUnsubscribe3() {
 }
 
 func testSubscribe1() {
-    setup()
-    defer cleanupMaster(lis)
     status := subscribe(mn, EMAIL1, URI1, true)
     if !checkStatus(rssproto.SUBSUCCESS, status, false) {
         return
     }
     status = subscribe(mn, EMAIL1, URI1, true)
     checkStatus(rssproto.SUBFAIL, status, true)
+    subscribe(mn, EMAIL1, URI1, false)
 }
 
 func testSubscribe2() {
-    setup()
-    defer cleanupMaster(lis)
     status := subscribe(mn, EMAIL1, URI1, true)
     if !checkStatus(rssproto.SUBSUCCESS, status, false) {
         return
@@ -187,12 +166,14 @@ func testSubscribe2() {
         return
     }
     status = subscribe(mn, EMAIL1, URI1, true)
-    checkStatus(rssproto.SUBSUCCESS, status, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI1, false)
+    checkStatus(rssproto.UNSUBSUCCESS, status, true)
 }
 
 func testSubscribe3() {
-    setup()
-    defer cleanupMaster(lis)
     status := subscribe(mn, EMAIL1, URI1, true)
     if !checkStatus(rssproto.SUBSUCCESS, status, false) {
         return
@@ -207,6 +188,8 @@ func testSubscribe3() {
     }
     status = subscribe(mn, EMAIL2, URI1, true)
     checkStatus(rssproto.SUBSUCCESS, status, true)
+    subscribe(mn, EMAIL2, URI1, false)
+    subscribe(mn, EMAIL1, URI1, false)
 }
 
 // final == true means that this is the final call to checkStatus
@@ -279,6 +262,10 @@ func main() {
     */
 
 	// Run tests
+    if !setup() {
+        fmt.Println("Setup did not work")
+        return
+    }
 	for _, t := range tests {
         if b, err := regexp.MatchString(*testRegex, t.name); b && err == nil {
             fmt.Println("Starting " + t.name + ":")
