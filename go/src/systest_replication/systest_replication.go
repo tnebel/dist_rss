@@ -2,16 +2,14 @@ package main
 
 import (
     "masternode"
-    "rssstore"
-    "net"
-    "net/http"
-    "net/rpc"
     "fmt"
     "flag"
     "rssproto"
-    //"log"
+    "log"
     "regexp"
     "os/exec"
+    "strconv"
+    "time"
 )
 
 const (
@@ -49,12 +47,11 @@ func setup(addrToPidMap map[string]int) bool {
         return false
     }
     // Make call to get servers
-    var args rssproto.GetServersArgs
-    var reply rssproto.GetServersReply
-    mn.GetServers(&args, &reply)
-    primaryNodes := reply.primaryNodeList
-    backupNodes := reply.backupNodeList
-    spareNodes := reply.spareNodeList
+    var reply rssproto.RegisterReply
+    mn.GetServerInfo(&reply)
+    primaryNodes := reply.PrimaryServers
+    backupNodes := reply.BackupServers
+    spareNodes := reply.SpareServers
     pidP1 = addrToPidMap[primaryNodes[0].HostPort]
     pidP2 = addrToPidMap[primaryNodes[1].HostPort]
     if backupNodes[0].NodeID == primaryNodes[0].NodeID {
@@ -76,32 +73,111 @@ func testFailover() {
     if !checkStatus(rssproto.SUBSUCCESS, status, false) {
         return
     }
-    kill(pid)
-    kill(pid)
+    kill(pidP1)
+    kill(pidP2)
     status = subscribe(mn, EMAIL1, URI1, false)
     checkStatus(rssproto.UNSUBSUCCESS, status, true)
 }
 
 func kill(pid int) {
-    kill := exec.Command("kill -9", pid)
+    kill := exec.Command("kill", "-9", strconv.Itoa(pid))
+    fmt.Println("Doing kill on " + strconv.Itoa(pid))
     err := kill.Start()
     if err != nil {
         log.Fatal(err)
     }
     kill.Wait()
+    time.Sleep(time.Second)
 }
 
 // setup state
 // kill primary
 // kill new primary, now spare will be in place as primary
 // check that the spare(new primary) has expected state
+func testUseSpare() {
+    status := subscribe(mn, EMAIL1, URI1, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI2, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI3, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    kill(pidP1)
+    kill(pidB1)
+    status = subscribe(mn, EMAIL1, URI1, false)
+    checkStatus(rssproto.UNSUBSUCCESS, status, true)
+}
 
 // kill the spare
-// doesn't fuck shit up
+// see that it doesn't mess up too much stuff
+func testKillSpare() {
+    status := subscribe(mn, EMAIL1, URI1, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI2, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI3, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    // kill the spare
+    kill(pidS1)
+    status = subscribe(mn, EMAIL1, URI1, false)
+    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI2, false)
+    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI3, false)
+    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
+        return
+    }
+}
+
 
 // kill the backup
 // kill primary
 // check state
+func testKillBackupAndSpare() {
+    status := subscribe(mn, EMAIL1, URI1, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI2, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI3, true)
+    if !checkStatus(rssproto.SUBSUCCESS, status, false) {
+        return
+    }
+    // kill the spare
+    kill(pidB1)
+    kill(pidB2)
+    kill(pidS1)
+    status = subscribe(mn, EMAIL1, URI1, false)
+    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI2, false)
+    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
+        return
+    }
+    status = subscribe(mn, EMAIL1, URI3, false)
+    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
+        return
+    }
+}
 
 // final == true means that this is the final call to checkStatus
 // within a test, thus if expected == result, log the PASS
@@ -140,21 +216,22 @@ func main() {
 	tests := []TestFunc{
 		TestFunc{"testFailover", testFailover}}
 
-    /*
 	flag.Parse()
+    /*
 	if (flag.NArg() < 1) {
         log.Fatal("usage:  libtest <storage master node>")
 	}
     */
     // First, set up a map from addresses to PIDs given in args
-    args := flag.Args
+    args := flag.Args()
+    fmt.Println(len(args))
     if (len(args)<10){
         fmt.Println("Not enough args given. Need address and pid for 5 servers.")
     }
     addrToPidMap := make(map[string]int)
-    for i:=0; i<5; i++ {
+    for i:=0; i<5; i=i+1 {
         // we expect addr1 pid1 addr2 pid2, etc.
-        addrToPidMap[args[i]] = args[i+1]
+        addrToPidMap[args[2*i]], _ = strconv.Atoi(args[2*i+1])
     }
 
     // Run tests
