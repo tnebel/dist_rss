@@ -36,6 +36,12 @@ func seedRNG() {
     rand.Seed( randint.Int64())
 }
 
+func (mn *MasterNode) GetServerInfo(reply *rssproto.RegisterReply) {
+    reply.PrimaryServers = mn.primaryNodeList
+    reply.BackupServers = mn.backupNodeList
+    reply.SpareServers = mn.spareNodeList
+}
+
 // port: port num we're running on
 // server: address of master storage server to initially connect to
 func NewMaster(port int, server string) *MasterNode {
