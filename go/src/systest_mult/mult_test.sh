@@ -25,21 +25,22 @@ go build
 cd - > /dev/null
 
 # Start rss store1 (master for startup)
-${PROJECT_PATH}/src/rssstore -N=3 -B=0 -S=0 -p=${STORAGE_PORT1}> /dev/null &
+${PROJECT_PATH}/src/rssstoreserver/rssstoreserver -N=3 -B=0 -S=0 -p=${STORAGE_PORT1}> /dev/null &
 STORAGE_SERVER1_PID=$!
 
 # Start rss store2
-${PROJECT_PATH}/src/rssstore -p=${STORAGE_PORT2} -m="localhost:${STORAGE_PORT1}" 2> /dev/null &
+${PROJECT_PATH}/src/rssstoreserver/rssstoreserver -p=${STORAGE_PORT2} -m="localhost:${STORAGE_PORT1}" 2> /dev/null &
 STORAGE_SERVER2_PID=$!
 
 # Start rss store3
-${PROJECT_PATH}/src/rssstore -p=${STORAGE_PORT3} -m="localhost:${STORAGE_PORT1}" 2> /dev/null &
+${PROJECT_PATH}/src/rssstoreserver/rssstoreserver -p=${STORAGE_PORT3} -m="localhost:${STORAGE_PORT1}" 2> /dev/null &
 STORAGE_SERVER3_PID=$!
 
 sleep 5
 
 # Start test
-${PROJECT_PATH}/src/systest/systest_mult "localhost:${STORAGE_PORT1}"
+#${PROJECT_PATH}/src/systest/systest_mult "localhost:${STORAGE_PORT1}"
+${PROJECT_PATH}/src/systest_mult/systest_mult 
 
 # Kill storage server
 kill -9 ${STORAGE_SERVER1_PID}

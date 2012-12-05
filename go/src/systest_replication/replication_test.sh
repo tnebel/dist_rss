@@ -27,29 +27,29 @@ go build
 cd - > /dev/null
 
 # Start rss store1 (master for startup)
-${PROJECT_PATH}/src/rssstore -N=2 -B=2 -S=1 -p=${STORAGE_PORT1}> /dev/null &
+${PROJECT_PATH}/src/rssstoreserver/rssstoreserver -N=2 -B=2 -S=1 -p=${STORAGE_PORT1}> /dev/null &
 STORAGE_SERVER1_PID=$!
 
 # Start rss store2
-${PROJECT_PATH}/src/rssstore -p=${STORAGE_PORT2} -m="localhost:${STORAGE_PORT1}" 2> /dev/null &
+${PROJECT_PATH}/src/rssstoreserver/rssstoreserver -p=${STORAGE_PORT2} -m="localhost:${STORAGE_PORT1}" 2> /dev/null &
 STORAGE_SERVER2_PID=$!
 
 # Start rss store3
-${PROJECT_PATH}/src/rssstore -p=${STORAGE_PORT3} -m="localhost:${STORAGE_PORT1}" 2> /dev/null &
+${PROJECT_PATH}/src/rssstoreserver/rssstoreserver -p=${STORAGE_PORT3} -m="localhost:${STORAGE_PORT1}" 2> /dev/null &
 STORAGE_SERVER3_PID=$!
 
 # Start rss store4
-${PROJECT_PATH}/src/rssstore -p=${STORAGE_PORT4} -m="localhost:${STORAGE_PORT1}" 2> /dev/null &
+${PROJECT_PATH}/src/rssstoreserver/rssstoreserver -p=${STORAGE_PORT4} -m="localhost:${STORAGE_PORT1}" 2> /dev/null &
 STORAGE_SERVER4_PID=$!
 
 # Start rss store5
-${PROJECT_PATH}/src/rssstore -p=${STORAGE_PORT5} -m="localhost:${STORAGE_PORT1}" 2> /dev/null &
+${PROJECT_PATH}/src/rssstoreserver/rssstoreserver -p=${STORAGE_PORT5} -m="localhost:${STORAGE_PORT1}" 2> /dev/null &
 STORAGE_SERVER5_PID=$!
 
 sleep 5
 
 # Start test
-${PROJECT_PATH}/src/systest/systest_replication "localhost:${STORAGE_PORT1}"
+${PROJECT_PATH}/src/systest_replication/systest_replication "localhost:${STORAGE_PORT1}"
 
 # Kill storage server
 kill -9 ${STORAGE_SERVER1_PID}
