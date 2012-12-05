@@ -32,6 +32,7 @@ var mn *masternode.MasterNode
 var testRegex *string = flag.String("t", "", "test to run")
 var passCount int
 var failCount int
+var pidP1, pidP2, pidB1, pidB2, pidS1 int
 
 func initMaster(storage, server, myhostport string ) bool {
     mn = masternode.NewMaster(5001, storage)
@@ -42,8 +43,29 @@ func initMaster(storage, server, myhostport string ) bool {
     return true
 }
 
-func setup() bool {
-    return initMaster("localhost:5002", "localhost:5001", "localhost:5001") 
+func setup(addrToPidMap map[string]int) bool {
+    initialized := initMaster("localhost:5002", "localhost:5001", "localhost:5001")
+    if !initialized{
+        return false
+    }
+    // Make call to get servers
+    var args rssproto.GetServersArgs
+    var reply rssproto.GetServersReply
+    mn.GetServers(&args, &reply)
+    primaryNodes := reply.primaryNodeList
+    backupNodes := reply.backupNodeList
+    spareNodes := reply.spareNodeList
+    pidP1 = addrToPidMap[primaryNodes[0].HostPort]
+    pidP2 = addrToPidMap[primaryNodes[1].HostPort]
+    if backupNodes[0].NodeID == primaryNodes[0].NodeID {
+        pidB1 = addrToPidMap[backupNodes[0].HostPort]
+        pidB2 = addrToPidMap[backupNodes[1].HostPort]
+    } else {
+        pidB1 = addrToPidMap[backupNodes[1].HostPort]
+        pidB2 = addrToPidMap[backupNodes[0].HostPort]
+    }
+    pidS1 = addrToPidMap[spareNodes[0].HostPort]
+    return true
 }
 
 // setup some state by making subscriptions
@@ -60,7 +82,7 @@ func testFailover() {
     checkStatus(rssproto.UNSUBSUCCESS, status, true)
 }
 
-fun kill(pid int) {
+func kill(pid int) {
     kill := exec.Command("kill -9", pid)
     err := kill.Start()
     if err != nil {
@@ -124,9 +146,19 @@ func main() {
         log.Fatal("usage:  libtest <storage master node>")
 	}
     */
+    // First, set up a map from addresses to PIDs given in args
+    args := flag.Args
+    if (len(args)<10){
+        fmt.Println("Not enough args given. Need address and pid for 5 servers.")
+    }
+    addrToPidMap := make(map[string]int)
+    for i:=0; i<5; i++ {
+        // we expect addr1 pid1 addr2 pid2, etc.
+        addrToPidMap[args[i]] = args[i+1]
+    }
 
-	// Run tests
-    if !setup() {
+    // Run tests
+    if !setup(addrToPidMap) {
         fmt.Println("Setup did not work")
         return
     }
