@@ -49,7 +49,7 @@ STORAGE_SERVER5_PID=$!
 sleep 5
 
 # Start test
-${PROJECT_PATH}/src/systest_replication/systest_replication "localhost:${STORAGE_PORT1}" "${STORAGE_SERVER1_PID}" "localhost:${STORAGE_PORT2}" "${STORAGE_SERVER2_PID}" "localhost:${STORAGE_PORT3}" "${STORAGE_SERVER3_PID}" "localhost:${STORAGE_PORT4}" "${STORAGE_SERVER4_PID}" "localhost:${STORAGE_PORT5}" "${STORAGE_SERVER5_PID}" "0"
+${PROJECT_PATH}/src/systest_replication/systest_replication "localhost:${STORAGE_PORT1}" "${STORAGE_SERVER1_PID}" "localhost:${STORAGE_PORT2}" "${STORAGE_SERVER2_PID}" "localhost:${STORAGE_PORT3}" "${STORAGE_SERVER3_PID}" "localhost:${STORAGE_PORT4}" "${STORAGE_SERVER4_PID}" "localhost:${STORAGE_PORT5}" "${STORAGE_SERVER5_PID}" "1"
 
 # Kill storage server
 kill -9 ${STORAGE_SERVER1_PID}

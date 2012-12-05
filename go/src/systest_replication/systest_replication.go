@@ -6,7 +6,7 @@ import (
     "flag"
     "rssproto"
     "log"
-    "regexp"
+    //"regexp"
     "os/exec"
     "strconv"
     "time"
@@ -75,6 +75,9 @@ func testFailover() {
     }
     kill(pidP1)
     kill(pidP2)
+    status = subscribe(mn, EMAIL2, URI2, true)
+    status = subscribe(mn, EMAIL3, URI2, true)
+    status = subscribe(mn, EMAIL1, URI2, true)
     status = subscribe(mn, EMAIL1, URI1, false)
     checkStatus(rssproto.UNSUBSUCCESS, status, true)
 }
@@ -108,6 +111,10 @@ func testUseSpare() {
         return
     }
     kill(pidP1)
+    time.Sleep(time.Second)
+    subscribe(mn, EMAIL1, URI2, true)
+    subscribe(mn, EMAIL2, URI2, true)
+    subscribe(mn, EMAIL3, URI2, true)
     kill(pidB1)
     status = subscribe(mn, EMAIL1, URI1, false)
     checkStatus(rssproto.UNSUBSUCCESS, status, true)
@@ -139,9 +146,7 @@ func testKillSpare() {
         return
     }
     status = subscribe(mn, EMAIL1, URI3, false)
-    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
-        return
-    }
+    checkStatus(rssproto.UNSUBSUCCESS, status, true)
 }
 
 
@@ -174,9 +179,7 @@ func testKillBackupAndSpare() {
         return
     }
     status = subscribe(mn, EMAIL1, URI3, false)
-    if !checkStatus(rssproto.UNSUBSUCCESS, status, false) {
-        return
-    }
+    checkStatus(rssproto.UNSUBSUCCESS, status, true)
 }
 
 // final == true means that this is the final call to checkStatus
@@ -214,17 +217,14 @@ func main() {
 	failCount = 0
 
 	tests := []TestFunc{
-		TestFunc{"testFailover", testFailover}}
+		TestFunc{"testFailover", testFailover},
+		TestFunc{"testUseSpare", testUseSpare},
+		TestFunc{"testKillSpare", testKillSpare},
+		TestFunc{"testKillBackupAndSpare", testKillBackupAndSpare}}
 
 	flag.Parse()
-    /*
-	if (flag.NArg() < 1) {
-        log.Fatal("usage:  libtest <storage master node>")
-	}
-    */
     // First, set up a map from addresses to PIDs given in args
     args := flag.Args()
-    fmt.Println(len(args))
     if (len(args)<10){
         fmt.Println("Not enough args given. Need address and pid for 5 servers.")
     }
@@ -233,18 +233,26 @@ func main() {
         // we expect addr1 pid1 addr2 pid2, etc.
         addrToPidMap[args[2*i]], _ = strconv.Atoi(args[2*i+1])
     }
+    whichTestToRun := args[10]
 
     // Run tests
     if !setup(addrToPidMap) {
         fmt.Println("Setup did not work")
         return
     }
+    var testNum int
+    testNum, _ = strconv.Atoi(whichTestToRun)
+    t := tests[testNum]
+    fmt.Println("Starting " + t.name + ":")
+    t.f()
+    /*
 	for _, t := range tests {
         if b, err := regexp.MatchString(*testRegex, t.name); b && err == nil {
             fmt.Println("Starting " + t.name + ":")
             t.f()
         }
     }
+    */
 
 	fmt.Printf("Passed (%d/%d) tests\n", passCount, passCount + failCount)
 }
