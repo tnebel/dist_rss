@@ -33,6 +33,7 @@ type RssStore struct {
     registrationSignalCh chan bool
     nodelistMutex sync.Mutex
     numPrimaryNodes int
+    numBackupNodes int
     numSpareNodes int
     numPrimariesRegistered int
     numBackupsRegistered int
@@ -55,13 +56,21 @@ func seedRNG() {
     rand.Seed( randint.Int64())
 }
 
-func NewRssStore(master string, portnum int, numNodes int, numSpareNodes int) (*RssStore, error) {
+func NewRssStore(master string, portnum int, numPrimaryNodes int, numBackupNodes int, numSpareNodes int) (*RssStore, error) {
     defer fmt.Println("New RssStore going")
-
     rs := new(RssStore)
     rs.portnum = portnum
     rs.hostport = fmt.Sprintf("localhost:%d", portnum)
-    rs.numPrimaryNodes = numNodes
+    if numPrimaryNodes < numBackupNodes {
+        fmt.Println("Error: Number of primary nodes must be greater than or equal to the number of backup nodes.")
+        return nil, errors.New("Cannot have more backups than primaries.")
+    }
+    if numBackupNodes == 0 && numSpareNodes > 0 {
+        fmt.Println("Error: Must declare at least one backup server to declare spare nodes.")
+        return nil, errors.New("Cannot have spare nodes if no backup nodes are declared.")
+    }
+    rs.numPrimaryNodes = numPrimaryNodes
+    rs.numBackupNodes = numBackupNodes
     rs.numSpareNodes = numSpareNodes
 
     rs.uriToInfo = make(map[string]*RSSInfo)
@@ -88,7 +97,7 @@ func (rs *RssStore) RegisterServer(args *rssproto.RegisterArgs, reply *rssproto.
         reply.NodeType = rssproto.PRIMARY
         rs.primaryNodeList = append(rs.primaryNodeList, rssproto.Node{args.ServerInfo.HostPort, reply.NodeID})
         rs.numPrimariesRegistered += 1
-    } else if (rs.numBackupsRegistered < rs.numPrimaryNodes){
+    } else if (rs.numBackupsRegistered < rs.numBackupNodes){
         // Then we will register this node as a backup node
         reply.NodeID = rs.primaryNodeList[rs.numBackupsRegistered].NodeID
         reply.NodeType = rssproto.BACKUP
@@ -102,7 +111,7 @@ func (rs *RssStore) RegisterServer(args *rssproto.RegisterArgs, reply *rssproto.
     }
 
     allPrimariesRegistered := rs.numPrimariesRegistered == rs.numPrimaryNodes
-    allBackupsRegistered := rs.numBackupsRegistered == rs.numPrimaryNodes
+    allBackupsRegistered := rs.numBackupsRegistered == rs.numBackupNodes
     allSparesRegistered := rs.numSparesRegistered == rs.numSpareNodes
     reply.Ready = allPrimariesRegistered && allBackupsRegistered && allSparesRegistered
     reply.PrimaryServers = rs.primaryNodeList
@@ -186,14 +195,16 @@ func (rs *RssStore) RegisterWithMaster(master string) error {
                 for i:=0; i<len(rs.backupNodeList); i++ {
                     if rs.backupNodeList[i].NodeID == rs.nodeId {
                         backupAddr = rs.backupNodeList[i].HostPort
+                        // set up an RPC connection to that backup
+                        rs.backupConn, err = rs.getConnection(backupAddr)
+                        if err != nil {
+                            fmt.Println("Could not connect to backup node on startup")
+                            return err
+                        }
+                        break
                     }
                 }
-                // set up an RPC connection to that backup
-                rs.backupConn, err = rs.getConnection(backupAddr)
-                if err != nil {
-                    fmt.Println("Could not connect to backup node on startup")
-                    return err
-                }
+
             }
         }
     }
@@ -215,7 +226,7 @@ func (rs *RssStore) GetServers(args *rssproto.GetServersArgs, reply *rssproto.Re
         return nil
     }
     allPrimariesRegistered := rs.numPrimariesRegistered == rs.numPrimaryNodes
-    allBackupsRegistered := rs.numBackupsRegistered == rs.numPrimaryNodes
+    allBackupsRegistered := rs.numBackupsRegistered == rs.numBackupNodes
     allSparesRegistered := rs.numSparesRegistered == rs.numSpareNodes
     //note: if this node was not the master node, then these three are true
     //      by default, 
