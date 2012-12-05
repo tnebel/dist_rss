@@ -344,6 +344,7 @@ func (rs *RssStore) BeginRepair () error {
             }
         }
     }
+    fmt.Println("Finished repair process successfully.")
     rs.lock.Unlock()
     rs.nodelistMutex.Unlock()
     return nil
@@ -583,6 +584,7 @@ func (rs *RssStore) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.Su
                 if err != nil {
                     // Then our backup has already failed again. 
                     // We give up and move on without a backup.
+                    fmt.Println("NO BACKUP CONNECTION FOUND!!!!!!!!")
                     rs.nodelistMutex.Lock()
                     rs.backupConn = nil
                     rs.nodelistMutex.Unlock()

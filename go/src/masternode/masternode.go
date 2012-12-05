@@ -16,7 +16,7 @@ import (
 )
 
 const (
-    RETRIES = 5
+    RETRIES = 10
 )
 
 type MasterNode struct {
@@ -85,11 +85,12 @@ func (mn *MasterNode) RetreiveServerLists() error {
 
     for numTries := 0; numTries < RETRIES; numTries++{
         if (numTries != 0){
-            time.Sleep(100*time.Millisecond)
+            time.Sleep(1*time.Second)
         }
-        fmt.Println("Attempting to retreive a new server list")
         rand_server_idx := rand.Intn(len(nodeList))
         serverAddr := nodeList[rand_server_idx].HostPort
+
+        fmt.Println(fmt.Sprintf("Attempting to retreive a new server list from %s", serverAddr))
         conn, err := mn.getServer(serverAddr)
         if err != nil {
             numTries += 1
@@ -97,8 +98,8 @@ func (mn *MasterNode) RetreiveServerLists() error {
         }
         args := new(rssproto.GetServersArgs)
         var reply rssproto.RegisterReply
-        _ = conn.Call("RssStoreRPC.GetServers", &args, &reply)
-        if !reply.Ready {
+        err = conn.Call("RssStoreRPC.GetServers", &args, &reply)
+        if err!=nil || !reply.Ready {
             numTries += 1
             continue
         }
@@ -148,10 +149,14 @@ func (mn *MasterNode) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.Su
     fmt.Println(fmt.Sprintf("Routing subscription request for %s to %s", args.Email, args.URI))
     uri := args.URI
     for numTries:=0; numTries<RETRIES; numTries++ {
+        mn.nodelistMutex.Lock()
         p_id, hp := determinePartitionID(Storehash(uri), mn.primaryNodeList)
+        mn.nodelistMutex.Unlock()
         cli, err := mn.getServer(hp)
 
         if err != nil {
+            fmt.Println("Trouble reaching primary node. Retrying:")
+            fmt.Println(err)
             if numTries == 0{
                 fmt.Println("detected dead Primary node")
             }
@@ -163,7 +168,9 @@ func (mn *MasterNode) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.Su
         }
         err = cli.Call("RssStoreRPC.Subscribe", args, reply)
         if err != nil {
-            if numTries == 0{
+            fmt.Println("Trouble in RPC call to primary node. Retrying")
+            fmt.Println(err)
+             if numTries == 0{
                 fmt.Println("detected dead Primary node")
             }
             mn.NotifyBackupOfFailure(p_id)
@@ -176,17 +183,22 @@ func (mn *MasterNode) Subscribe(args *rssproto.SubscribeArgs, reply *rssproto.Su
         }
     }
     reply.Status = rssproto.NOCONNECTION
-    return errors.New("could not reach primary node after multiple attemts to update list")
+    fmt.Println("could not reach primary node after multiple attempts to update list")
+    return errors.New("could not reach primary node after multiple attempts to update list")
 }
 
 func (mn *MasterNode) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.SubscribeReply) error {
     fmt.Println(fmt.Sprintf("Routing unsubscribe request for %s to %s", args.Email, args.URI))
     uri := args.URI
     for numTries:=0; numTries<RETRIES; numTries++ {
+        mn.nodelistMutex.Lock()
         p_id, hp := determinePartitionID(Storehash(uri), mn.primaryNodeList)
+        mn.nodelistMutex.Unlock()
         cli, err := mn.getServer(hp)
 
         if err != nil {
+            fmt.Println("Trouble reaching primary node. Retrying:")
+            fmt.Println(err)
             mn.NotifyBackupOfFailure(p_id)
             time.Sleep(time.Second)
             mn.RetreiveServerLists()
@@ -195,6 +207,8 @@ func (mn *MasterNode) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.
         }
         err = cli.Call("RssStoreRPC.Unsubscribe", args, reply)
         if err != nil {
+            fmt.Println("Trouble in RPC call to primary node. Retrying")
+            fmt.Println(err)
             mn.NotifyBackupOfFailure(p_id)
             time.Sleep(time.Second)
             mn.RetreiveServerLists()
@@ -205,7 +219,8 @@ func (mn *MasterNode) Unsubscribe(args *rssproto.SubscribeArgs, reply *rssproto.
         }
     }
     reply.Status = rssproto.NOCONNECTION
-    return errors.New("could not reach primary node after multiple attemts to update list")
+    fmt.Println("could not reach primary node after multiple attempts to update list")
+    return errors.New("could not reach primary node after multiple attempts to update list")
 }
 
 func tryConnection(hostport string) (*rpc.Client, error) {

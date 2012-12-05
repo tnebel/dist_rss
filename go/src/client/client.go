@@ -48,6 +48,7 @@ func main(){
 
     if err != nil{
         fmt.Printf("ERROR: Remote Procedure Call Failed\n")
+        fmt.Println(err)
         return
     }
 
